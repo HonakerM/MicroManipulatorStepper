@@ -402,18 +402,31 @@ bool save_lut_to_file(const LookupTable& lut, const char* filename) {
     return false;
   }
 
+  LOG_DEBUG("Opened file '%s'...", filename);
+
   // Save metadata
   uint32_t size = lut.size();
   float input_min, input_max;
   lut.get_intput_range(input_min, input_max);
+
+  LOG_DEBUG("Aquired metadata to save");
 
   // Write metadata (size, input_min, input_max)
   if (file.write((uint8_t*)&size, sizeof(size)) != sizeof(size)) return false;
   if (file.write((uint8_t*)&input_min, sizeof(input_min)) != sizeof(input_min)) return false;
   if (file.write((uint8_t*)&input_max, sizeof(input_max)) != sizeof(input_max)) return false;
 
+  LOG_DEBUG("Saved Metadata to file");
+
+
   // Write all LUT entries
+  uint16_t last_step = 0;
   for (uint32_t i = 0; i < size; i++) {
+    float current_percentage = (float(i) / size) * 100.0f;
+    if (current_percentage - last_step >= 10.0f) {
+      LOG_DEBUG("Saving LUT data to file... %.0f%%", current_percentage);
+      last_step = uint16_t(current_percentage);
+    }
     float v = lut.get_entry(i);
     if (file.write((uint8_t*)&v, sizeof(v)) != sizeof(v)) return false;
   }

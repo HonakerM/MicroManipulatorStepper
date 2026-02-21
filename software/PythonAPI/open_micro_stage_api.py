@@ -76,7 +76,7 @@ class SerialInterface:
         print(f"[SerialInterface] Connecting to port '{self.port}'...", end='')
         while time.time() < deadline:
             try:
-                self.serial = serial.Serial(self.port, self.baud_rate, timeout=2)
+                self.serial = serial.Serial(self.port, self.baud_rate, timeout=10)
                 print(f" [OK]")
                 print(Style.RESET_ALL, end='')
                 return True
@@ -316,7 +316,7 @@ class OpenMicroStageInterface:
         """
         cmd = f"M56 J{joint_index} P"
         if save_result: cmd += ' S'
-        res, msg = self.serial.send_command(cmd, 30)
+        res, msg = self.serial.send_command(cmd, 240)
 
         calibration_data = self._parse_table_data(msg, 3)
         return res, calibration_data

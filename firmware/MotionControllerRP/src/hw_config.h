@@ -6,9 +6,9 @@
 // motor pole pair count
 //  * 100 for 0.9deg stepper motors
 //  * 50  for 1.8deg stepper motors
-constexpr float MOTOR1_POLE_PAIRS = 100;
-constexpr float MOTOR2_POLE_PAIRS = 100;
-constexpr float MOTOR3_POLE_PAIRS = 100;
+constexpr float MOTOR1_POLE_PAIRS = 50;
+constexpr float MOTOR2_POLE_PAIRS = 50;
+constexpr float MOTOR3_POLE_PAIRS = 50;
 
 //--- ENCODERS ----------------------------------------------------------------
 

@@ -1,0 +1,105 @@
+Metadata-Version: 2.4
+Name: open_micro_stage
+Version: 0.1.0
+Summary: Python API for controlling the Open Micro Stage manipulator
+Author: MicroManipulatorStepper Contributors
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/HonakerM/MicroManipulatorStepper
+Project-URL: Repository, https://github.com/HonakerM/MicroManipulatorStepper.git
+Project-URL: Documentation, https://github.com/HonakerM/MicroManipulatorStepper
+Project-URL: Issues, https://github.com/HonakerM/MicroManipulatorStepper/issues
+Keywords: micromanipulator,stepper,stage,control,robotics
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: pyserial
+Requires-Dist: colorama
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Dynamic: license-file
+
+# Open Micro Stage Python API
+
+A Python API for controlling the Open Micro Stage micro-manipulator.
+
+## Installation
+
+### Development Installation
+
+```bash
+pip install -e .
+```
+
+### Production Installation
+
+```bash
+pip install open_micro_stage
+```
+
+## Usage
+
+```python
+from open_micro_stage import OpenMicroStageInterface
+
+# Create interface and connect
+oms = OpenMicroStageInterface(show_communication=True, show_log_messages=True)
+oms.connect('/dev/ttyACM0')
+
+# Home device
+oms.home()
+
+# Move to position
+oms.move_to(0, 0, 0, f=10)
+oms.wait_for_stop()
+
+# Read device state
+oms.read_device_state_info()
+```
+
+See `examples/` directory for more usage examples.
+
+## Requirements
+
+- Python >= 3.8
+- numpy
+- pyserial
+- colorama
+
+## Development
+
+### Install Development Dependencies
+
+```bash
+pip install -e ".[dev]"
+```
+
+### Run Tests
+
+```bash
+pytest
+```
+
+### Code Quality
+
+The project uses [Ruff](https://github.com/astral-sh/ruff) for:
+- Code formatting
+- Import sorting
+- Linting (pycodestyle, Pyflakes, flake8-bugbear, flake8-comprehensions)
+
+#### Format and lint code
+
+```bash
+ruff format .
+ruff check --fix .
+```
+
+## License
+
+See LICENSE file for details.
+
