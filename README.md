@@ -32,7 +32,22 @@ joint the projects community [Discord Server](https://discord.gg/maRvMVpa2Q).
 5. Upload firmware using VSCode with PlattformIO plugin
 6. Calibrate axis
 
-## ✨NEW: Open Micro-Manipulator GUI
+## ✨NEW: Hardware Version 4.0
+A new version of the hardware has been released, fixing several issues with the previous design:
+
+- Self collision during homing fixed.
+- Connection of ball joint block with screws only was not well constrained and could rotated a bit.
+- No reliable way to ensure consistent linkage rod length
+- Unnecessary ball joint friction
+- Accurate ball position heavily dependet on print quality and corner rounding
+- Rubber bands could not be changed or removed once glued in.
+
+A video about the improved ball joint and linkage manufactoring process can be found on YT: [Better Ball Joints for the Open Micro-Manipulator](https://www.youtube.com/watch?v=NM2KXvRGmpg)
+Also the FreeCAD model was restructured and improved and now includes all pins and fasteners. It now provides a reference for all required mechanical parts. 
+
+WARNING: BOM is not updated yet...
+
+## Open Micro-Manipulator GUI
 To make testing and using the Open-Micro Manipulator easy and convenient a python control program with a graphical user interface is provided here: [Open Micro-Manipulator GUI](https://github.com/0x23/OpenMicroManipulatorGUI).
 It has simple controlls to move the device around, while also displaying a live camera feed (e.g. from a microscope camera). Additional features, include a simple g-code runner and realtime mouse control (e.g. for Biology applications).
 
@@ -118,7 +133,7 @@ You can also 3D-Print the parts but have to live with thermal drift (carbon fill
 <br>
 
 The CAD files can be found here: [CAD Models](construction).
-Please note that FreeCAD version **1.1.0dev** was used, and the files might not work with older versions.
+Please note that FreeCAD version **1.2.0dev** was used, and the files might not work with older versions.
 
 STL files for printing can be found here: [STL Files](construction/STL_3D_Printing/)
 
@@ -138,6 +153,8 @@ For usual winding resistance of your motors, the device should be powered by $${
   <img src="images/Kicad-Board.jpg" alt="Image 1" style="flex: 1; object-fit: contain; height: 10vw;">
   <img src="images/ControllerPCB.jpg" alt="Image 2" style="flex: 1; object-fit: contain; height: 10vw;">
 </div>
+
+The repository now also contains the fabrication files that can be directly uploaded to the PCB manufacturer.
 
 ## ⚙ Firmware
 
