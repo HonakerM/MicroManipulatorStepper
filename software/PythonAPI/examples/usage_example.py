@@ -5,14 +5,12 @@ import time
 oms = OpenMicroStageInterface(show_communication=True, show_log_messages=True)
 oms.connect('COM11')
 oms.read_device_state_info()
-oms.home()
-oms.wait_for_stop()
 
+# run this once to calibrate joints
+# for i in range(3): oms.calibrate_joint(i, save_result=True)
 
 # run this once to calibrate joints
 #for i in range(3): oms.calibrate_joint(i, save_result=True)
-#oms.calibrate_joint(2, save_result=True)
-#oms.read_device_state_info()
 
 # home device
 input("press to 0,0,0")
@@ -31,7 +29,5 @@ input("press to home")
 oms.home()
 oms.wait_for_stop()
 
-#oms.move_to(0.0001, 0.0, 0.0, f=10)
-
 # wait for moves to finish
-#oms.wait_for_stop()
+oms.read_device_state_info()
