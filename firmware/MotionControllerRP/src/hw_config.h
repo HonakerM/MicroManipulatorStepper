@@ -33,6 +33,9 @@ constexpr float CALIBRATION_RANGE = 95;
 // velocity of the magnetic field during calibration (lower is more accurate)
 constexpr float CALIBRATION_FIELD_VELOCITY = 40.0f; 
 
+//--- Peripherals ----------------------------------------------------------------
+#define PERIPHERAL_I2C_ADDRESS = 0x01;
+
 //--- PINS --------------------------------------------------------------------
 
 // #define SINGLE_AXIS_BOARD

@@ -8,6 +8,13 @@
 #include <string>
 #include <vector>
 
+// Types
+union FourByteArray {
+    uint32_t integer;
+    uint8_t bytes[sizeof(uint32_t)];
+};
+
+
 //*** FUNCTIONS *************************************************************************
 
 std::vector<std::string> get_file_list(const char* dirname, bool include_dirs);
