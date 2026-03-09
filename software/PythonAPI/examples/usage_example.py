@@ -9,6 +9,9 @@ oms.read_device_state_info()
 # run this once to calibrate joints
 # for i in range(3): oms.calibrate_joint(i, save_result=True)
 
+input("press to home")
+oms.home()
+
 # run this once to calibrate joints
 #for i in range(3): oms.calibrate_joint(i, save_result=True)
 
