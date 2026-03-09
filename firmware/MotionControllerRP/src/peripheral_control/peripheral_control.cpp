@@ -1,6 +1,7 @@
 
 
 #include "peripheral_control.h"
+#include <hw_config.h>
 
 
 
@@ -98,8 +99,9 @@ bool Peripheral::get_vac() {
   return status;
 }
 
-void Peripheral::home() {
+bool Peripheral::home() {
   write_to_register(HOME_REG, 0, NULL);
+  return true;
 }
 void Peripheral::estop() {
   write_to_register(ESTOP_REG, 0, NULL);
@@ -123,7 +125,7 @@ void Peripheral::execute(bool rot, bool temp, bool vac) {
 // TwoWire Helpers
 
 void Peripheral::write_to_register(uint8_t reg, size_t size, uint8_t* buffer){
-    wire->beginTransmission(PERIPHERAL_ADDRESS);
+    wire->beginTransmission(PERIPHERAL_I2C_ADDRESS);
     wire->write(reg);
     for(size_t i=0;i<size;i++){
       wire->endTransmission(false);
@@ -133,10 +135,10 @@ void Peripheral::write_to_register(uint8_t reg, size_t size, uint8_t* buffer){
 }
 
 void Peripheral::read_from_register(uint8_t reg, size_t size, uint8_t* buffer){
-    wire->beginTransmission(PERIPHERAL_ADDRESS);
+    wire->beginTransmission(PERIPHERAL_I2C_ADDRESS);
     wire->write(reg);
     wire->endTransmission(false);
-    wire->requestFrom(PERIPHERAL_ADDRESS, (uint8_t)size);
+    wire->requestFrom(PERIPHERAL_I2C_ADDRESS, (uint8_t)size);
     for(size_t i=0;i<size;i++){
       buffer[i] = wire->read();
     }

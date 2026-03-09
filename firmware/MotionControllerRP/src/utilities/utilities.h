@@ -5,14 +5,15 @@
 // Author:  M. S. (diffraction limited)
 // --------------------------------------------------------------------------------------
 
+#pragma once
 #include <string>
 #include <vector>
 
 // Types
-union FourByteArray {
+typedef union FourByteArray {
     uint32_t integer;
     uint8_t bytes[sizeof(uint32_t)];
-};
+} FourByteArray;
 
 
 //*** FUNCTIONS *************************************************************************

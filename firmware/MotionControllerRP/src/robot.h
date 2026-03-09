@@ -8,6 +8,7 @@
 #pragma once
 
 #include "utilities/logging.h"
+#include "peripheral_control/peripheral_control.h"
 #include "utilities/frequency_counter.h"
 #include "hardware/MT6701_encoder.h"
 #include "hardware/MT6835_encoder.h"
@@ -116,6 +117,8 @@ class Robot : public ICommandProcessor {
     void process_set_servo_parameter_command(const GCodeCommand& cmd, std::string& reply);
     void process_home_command(const GCodeCommand& cmd, std::string& reply);
     void process_calibrate_joint_command(const GCodeCommand& cmd, std::string& reply);
+    void process_rot_command(const GCodeCommand& cmd, std::string& reply);
+    void process_temp_command(const GCodeCommand& cmd, std::string& reply);
 
   protected:
     bool check_all_joints_ready();   // checks if all joints are homed and calibrated
@@ -146,4 +149,5 @@ class Robot : public ICommandProcessor {
 
     FrequencyCounter servo_loop_frequency_counter;
     FrequencyCounter motion_controller_frequency_counter;
+    Peripheral* peripheral;
 };

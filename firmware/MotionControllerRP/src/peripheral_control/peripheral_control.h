@@ -24,7 +24,7 @@ class Peripheral {
         void set_vac(bool status);
         bool get_vac();
         
-        void home();
+        bool home();
         void estop();
     
     private:
@@ -35,8 +35,6 @@ class Peripheral {
 
         TwoWire* wire;
 };
-
-#define PERIPHERAL_ADDRESS 0x00
 
 #define STATUS_REG 0x00
 #define ESTOP_REG 0xFD

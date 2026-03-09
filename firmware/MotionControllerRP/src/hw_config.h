@@ -34,7 +34,11 @@ constexpr float CALIBRATION_RANGE = 95;
 constexpr float CALIBRATION_FIELD_VELOCITY = 40.0f; 
 
 //--- Peripherals ----------------------------------------------------------------
-#define PERIPHERAL_I2C_ADDRESS = 0x01;
+#define PERIPHERAL_I2C_ADDRESS 0x01
+#define PERIPHERAL_I2C_INSTANCE PICO_DEFAULT_I2C_INSTANCE()
+#define PERIPHERAL_I2C_SDA_PIN PICO_DEFAULT_I2C_SDA_PIN
+#define PERIPHERAL_I2C_SCL_PIN PICO_DEFAULT_I2C_SCL_PIN
+#define PERIPHERAL_ENABLE false
 
 //--- PINS --------------------------------------------------------------------
 

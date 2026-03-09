@@ -70,5 +70,5 @@
     "typeinfo": "cpp",
     "variant": "cpp",
     "*.inc": "cpp"
-  }
+  },
 }

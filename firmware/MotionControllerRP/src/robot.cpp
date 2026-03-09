@@ -183,6 +183,13 @@ Robot::~Robot() {
 
 void Robot::init() {
   MT6835Encoder::setup_spi(spi0, PIN_ENCODER_SCK, PIN_ENCODER_MOSI, PIN_ENCODER_MISO, 8000000);
+  
+  ;
+  TwoWire* two_wire = new TwoWire(PERIPHERAL_I2C_INSTANCE, PERIPHERAL_I2C_SDA_PIN, PERIPHERAL_I2C_SCL_PIN);
+  peripheral = new Peripheral(two_wire);
+
+  // ensure peripheral is connected
+  peripheral->begin(PERIPHERAL_ENABLE);
 
   // axis 1
   {
@@ -530,6 +537,9 @@ void Robot::process_command(const GCodeCommand& cmd, std::string& reply) {
   else if(cmd.get_command() == "G4") process_dwell_command(cmd, reply);
   else if(cmd.get_command() == "G24") process_set_pose_command(cmd, reply);
   else if(cmd.get_command() == "G28") process_home_command(cmd, reply);
+  else if (PERIPHERAL_ENABLE){
+    if (cmd.get_command() == "G92") process_rot_command(cmd, reply);
+  }
   else if(startswith(cmd.get_command(), "M")) process_machine_command(cmd, reply);
   else reply="error: unknown command\n";
 }
@@ -567,6 +577,9 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
     reply += std::string("X") + std::to_string(current_pose.translation.x);
     reply += std::string(" Y") + std::to_string(current_pose.translation.y);
     reply += std::string(" Z") + std::to_string(current_pose.translation.z);
+    if (PERIPHERAL_ENABLE) {
+      reply += std::string(" C") + std::to_string(peripheral->get_cur_rot().get_value());
+    }
     reply += "\nok\n";
   }
 
@@ -623,6 +636,14 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
 
     reply += std::string("Servo Loop: ") + std::to_string(servo_loop_freq/1000) + " kHz\n";
     reply += std::string("Motion Controler: ") + std::to_string(mcontroler_freq) + " Hz\n";
+    reply += std::string("Peripheral Enabled: ") + std::to_string(PERIPHERAL_ENABLE) + " \n";
+    if (PERIPHERAL_ENABLE){
+          reply += std::string("  Rot: ") + std::to_string(peripheral->get_cur_rot().get_value()) + " °\n";
+          reply += std::string("  Temp: ") + std::to_string(peripheral->get_cur_temp().get_value()) + " °C\n";
+          reply += std::string("  vac: ") + std::to_string(peripheral->get_vac()) + "\n";
+    }
+
+    
 
     // file list
     reply += std::string("Files on flash: \n");
@@ -649,6 +670,18 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
     if(cmd.has_word('A')) max_acceleration.angular = cmd.get_value('A');
     reply += "ok\n";
   }
+
+  if (PERIPHERAL_ENABLE){
+    if (cmd.get_command() == "M104") process_temp_command(cmd, reply);
+    else if (cmd.get_command() == "M105") {
+      reply += std::string(" S") + std::to_string(peripheral->get_cur_temp().get_value())+" °C\n";
+      reply += "ok\n";
+    }
+    else if (cmd.get_command() == "M10") peripheral->set_vac(true);
+    else if (cmd.get_command() == "M11") peripheral->set_vac(false);
+
+  }
+
 }
 
 void Robot::process_motion_command(const GCodeCommand& cmd, std::string& reply) {
@@ -787,6 +820,10 @@ void Robot::process_home_command(const GCodeCommand& cmd, std::string& reply) {
 
   bool ok = home(joint_mask, retract_angles);
 
+  // home peripheral if enabled
+  if (PERIPHERAL_ENABLE){
+    ok = (ok && peripheral->home());
+  }
   reply = ok ? "ok\n" : "error\n";
 }
 
@@ -798,3 +835,25 @@ void Robot::process_calibrate_joint_command(const GCodeCommand& cmd, std::string
   bool ok = calibrate_joint(idx, store_calibration, print_measurements);
   reply = ok ? "ok\n" : "error\n";
 }
+
+void Robot::process_rot_command(const GCodeCommand& cmd, std::string& reply) {
+  float c_val = cmd.get_value('C', -1);
+  if (c_val<0){
+    reply = "error\n";
+    return;
+  }
+  peripheral->set_rot(RotDegree(c_val));
+  reply = "ok\n";
+}
+
+
+void Robot::process_temp_command(const GCodeCommand& cmd, std::string& reply) {
+  float temp_val = cmd.get_value('S', -1);
+  if (temp_val<0){
+    reply = "error\n";
+    return;
+  }
+  peripheral->set_temp(TempDegree(temp_val));
+  reply = "ok\n";
+}
+
