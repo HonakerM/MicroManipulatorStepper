@@ -76,7 +76,7 @@ class SerialInterface:
         print(f"[SerialInterface] Connecting to port '{self.port}'...", end='')
         while time.time() < deadline:
             try:
-                self.serial = serial.Serial(self.port, self.baud_rate, timeout=10)
+                self.serial = serial.Serial(self.port, self.baud_rate, timeout=90)
                 print(f" [OK]")
                 print(Style.RESET_ALL, end='')
                 return True
@@ -180,6 +180,7 @@ class SerialInterface:
             self.serial.flush()
 
             # Wait for completion
+            timeout = 180
             end_time = time.time() + timeout
             while self._response_status is None:
                 remaining = end_time - time.time()
