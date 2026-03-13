@@ -14,7 +14,7 @@ constexpr float MOTOR3_POLE_PAIRS = 50;
 
 // max current factor in range [0..1]. Lower values reduce pwm resolution so a
 // value above 0.4 is recommended.
-constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.6f;
+constexpr float MOTOR_MAX_CURRENT_FACTOR = 1.0f;
 
 //--- ENCODERS ----------------------------------------------------------------
 
