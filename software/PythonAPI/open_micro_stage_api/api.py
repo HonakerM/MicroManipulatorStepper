@@ -305,22 +305,24 @@ class OpenMicroStageInterface:
 
     def home(self, axis_list=None):
         """
-        Homes one or more axes on the device
+        Homes one or more axes on the device, one axis at a time
         :param axis_list: Optional list of axis indices to home. If None, all axes are homed.
         :return: The status of the command (e.g. OK, ERROR, TIMEOUT).
         """
-        cmd = "G28"
         axis_chars = ["A", "B", "C", "D", "E", "F"]
         if axis_list is None:
             axis_list = list(range(len(axis_chars)))
 
+        # Home one axis at a time
         for axis_idx in axis_list:
             if (0 > axis_idx) or (axis_idx >= len(axis_chars)):
                 raise ValueError("Axis index out of range")
-            cmd += " " + axis_chars[axis_idx]
-
-        res, msg = self.serial.send_command(cmd + "\n", 10)
-        return res
+            cmd = "G28 " + axis_chars[axis_idx]
+            res, msg = self.serial.send_command(cmd + "\n", 10)
+            if res != self.serial.ReplyStatus.OK:
+                return res
+        
+        return self.serial.ReplyStatus.OK
 
     def calibrate_joint(self, joint_index: int, save_result: bool):
         """
