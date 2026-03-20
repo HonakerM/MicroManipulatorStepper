@@ -9,7 +9,7 @@ oms.read_device_state_info()
 import os
 
 
-AXIS_CALIBRATION = 1
+AXIS_CALIBRATION = 2
 ENABLE_CALIBRATION = False
 ENABLE_MOVE = False
 ENABLE_FREE_MOVE = True
