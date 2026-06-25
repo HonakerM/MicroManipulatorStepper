@@ -14,7 +14,7 @@ constexpr float MOTOR3_POLE_PAIRS = 50;
 
 // max current factor in range [0..1]. Lower values reduce pwm resolution so a
 // value above 0.4 is recommended.
-constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.5f;
+constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.8f;
 
 //--- ENCODERS ----------------------------------------------------------------
 
@@ -32,7 +32,7 @@ constexpr bool ENABLE_ENCODER_CRC = false;
 //--- HOMING ------------------------------------------------------------------
 
 constexpr float HOMING_VELOCITY   = 1.0f;        // rad per s
-constexpr float HOMING_CURRENT    = 0.25f;       // range 0..1
+constexpr float HOMING_CURRENT    = 0.5f;       // range 0..1
 // NOT IMPLEMENTED YET: constexpr float HOMING_FINISH_POS = 0.5f;        // in rad
 constexpr float HOMING_RETRACTION_FIELD_ANGLE = 8.0f;
 constexpr float HOMING_RETRACTION_Z_FIELD_ANGLE = 8.0f;
