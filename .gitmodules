@@ -1,3 +1,13 @@
 [submodule "firmware/MotionControllerRP/lib/FreeRTOS-Kernel"]
 	path = firmware/MotionControllerRP/lib/FreeRTOS-Kernel
 	url = https://github.com/raspberrypi/FreeRTOS-Kernel.git
+[submodule "firmware/MotionControllerRP/lib/pico-sdk"]
+	path = firmware/MotionControllerRP/lib/pico-sdk
+	url = https://github.com/raspberrypi/pico-sdk.git
+	branch = master
+[submodule "firmware/MotionControllerRP/lib/pico-vfs"]
+	path = firmware/MotionControllerRP/lib/pico-vfs
+	url = https://github.com/oyama/pico-vfs.git
+[submodule "firmware/MotionControllerRP/lib/picotool"]
+	path = firmware/MotionControllerRP/lib/picotool
+	url = https://github.com/raspberrypi/picotool.git
