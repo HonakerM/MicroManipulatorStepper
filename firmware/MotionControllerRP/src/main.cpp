@@ -4,15 +4,41 @@
 //          All text in here must be included in any redistribution.
 // Author:  M. S. (diffraction limited)
 // --------------------------------------------------------------------------------------
+//
+// This is the FreeRTOS entry point. Previously the command-parser/path-planner loop and
+// the servo-control loop ran as two bare, un-yielding while(true) loops on core 0 and
+// core 1 respectively (via Arduino's setup()/loop() plus multicore_launch_core1()).
+// They are now two FreeRTOS tasks, each pinned to a core via vTaskCoreAffinitySet(), so
+// the scheduler has visibility into both loops (stack usage, priorities, the ability to
+// add further tasks alongside them, etc.) instead of the cores being permanently owned
+// by a single unmanaged loop.
+//
+// Both tasks still run essentially flat-out, matching the original behaviour: each
+// iteration ends with taskYIELD() rather than a real vTaskDelay(), so no artificial rate
+// limit is imposed on either the command-parsing/path-planning loop or the servo control
+// loop. taskYIELD() gives the scheduler on that core a chance to run the idle task /
+// timer service / any other same-or-lower priority task without slowing this one down.
+// If you later want the servo loop to run at a fixed, deterministic rate instead (e.g.
+// to guarantee CPU headroom on core 1 for other tasks), swap its taskYIELD() for
+// vTaskDelayUntil() against a fixed period -- see the comment near SERVO_TASK below.
+// --------------------------------------------------------------------------------------
 
 #include "main.h"
 
+#include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
 #include "hardware/vreg.h"
 
-#include <Wire.h>
 #include <algorithm>
+
+#include "FreeRTOS.h"
+#include "task.h"
+
+#include "compat/Serial_compat.h"
+#include "compat/Wire_compat.h"
+#include "compat/LittleFS_compat.h"
+#include "compat/Arduino_compat.h"
 
 #include "robot.h"
 #include "utilities/logging.h"
@@ -20,48 +46,28 @@
 #include "kinematic_models/kinematic_model_delta3d.h"
 #include "version.h"
 #include "hw_config.h"
-#include "LittleFS.h"
 
 #include "demo_gcode_generator.h"
 
+//*** CONFIG ****************************************************************************
+
+// Priorities: both application tasks sit above the idle task; the command/path-planner
+// task on core 0 is given slightly higher priority than the servo loop on core 1 since
+// they run on different cores anyway and this keeps their relative importance explicit
+// if that ever changes.
+#define COMMAND_TASK_PRIORITY (tskIDLE_PRIORITY + 2UL)
+#define SERVO_TASK_PRIORITY   (tskIDLE_PRIORITY + 2UL)
+
+#define COMMAND_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+#define SERVO_TASK_STACK_SIZE   configMINIMAL_STACK_SIZE
+
 //*** GLOBALS ***************************************************************************
 
-// NeoPixelConnect strip(PIN_BUILTIN_LED, 1);
 Robot robot(0.01f);
-
-/*
-MT6835Encoder encoder1(spi0, PIN_ENCODER1_CS);
-MT6835Encoder encoder2(spi0, PIN_ENCODER2_CS);
-MT6835Encoder encoder3(spi0, PIN_ENCODER3_CS);
-
-TB6612MotorDriver motor_driver1(
-  PIN_MOTOR_EN, PIN_M1_PWM_A_POS, PIN_M1_PWM_A_NEG, PIN_MOTOR_PWMAB,
-  PIN_MOTOR_EN, PIN_M1_PWM_B_POS, PIN_M1_PWM_B_NEG, PIN_MOTOR_PWMAB
-);
-TB6612MotorDriver motor_driver2(
-  PIN_MOTOR_EN, PIN_M2_PWM_A_POS, PIN_M2_PWM_A_NEG, PIN_MOTOR_PWMAB,
-  PIN_MOTOR_EN, PIN_M2_PWM_B_POS, PIN_M2_PWM_B_NEG, PIN_MOTOR_PWMAB
-);
-TB6612MotorDriver motor_driver3(
-  PIN_MOTOR_EN, PIN_M3_PWM_A_POS, PIN_M3_PWM_A_NEG, PIN_MOTOR_PWMAB,
-  PIN_MOTOR_EN, PIN_M3_PWM_B_POS, PIN_M3_PWM_B_NEG, PIN_MOTOR_PWMAB
-);
-
-ServoController servo_controller1(motor_driver1, encoder1, 400/4);
-ServoController servo_controller2(motor_driver2, encoder2, 400/4);
-ServoController servo_controller3(motor_driver3, encoder3, 400/4);
-FrequencyCounter loop_freq_counter(1000);
-
-PathPlanner planner(0.01f);
-MotionController motion_controller(&planner);
-Pose6DF current_pose;
-
-CommandParser command_parser; */
 
 //*** FUNCTIONS *************************************************************************
 
 // Run before setup()
-//__attribute__((constructor))
 void overclock() {
   vreg_set_voltage(VREG_VOLTAGE_1_20);         // For >133 MHz
   busy_wait_us(10 * 1000);  // 10 ms delay
@@ -69,75 +75,90 @@ void overclock() {
 }
 
 void set_led_color(uint8_t r, uint8_t g, uint8_t b) {
- /* strip.neoPixelSetValue(0, r, g, b, false);
-  delayMicroseconds(2000);
-  strip.neoPixelShow(); */
+  // NeoPixel status LED support was removed as part of the arduino-pico -> pico-sdk
+  // port (the NeoPixelConnect library has no pico-sdk equivalent wired up here). If you
+  // want it back, drive the WS2812 directly with the PIO program from
+  // pico-examples/pio/ws2812 and re-implement this function on top of it.
+  (void)r; (void)g; (void)b;
 }
 
 void led_blink(uint8_t r, uint8_t g, uint8_t b, int count, int period_time_ms) {
-  for(int i=0; i<count; i++) {
+  for (int i = 0; i < count; i++) {
     gpio_put(PIN_BUILTIN_LED, 1);
     // set_led_color(r, g, b);
-    sleep_ms(period_time_ms/2);
+    sleep_ms(period_time_ms / 2);
     // set_led_color(0, 0, 0);
     gpio_put(PIN_BUILTIN_LED, 0);
-    sleep_ms(period_time_ms/2);
+    sleep_ms(period_time_ms / 2);
   }
 }
 
-void main_core0() {
-  uint64_t last_time = time_us_64();
+//--- FreeRTOS tasks ----------------------------------------------------------------
 
+// Runs on core 0: services serial gcode input and drives the path planner.
+static void command_task(void* /*params*/) {
   #ifdef DEMO_MODE
     auto* demo_gcode_generator = new DemoGcodeGenerator(&robot);
     demo_gcode_generator->run();  // blocks forever
   #endif
 
-  while(true) {
-    // update motion controller
+  while (true) {
     robot.update_command_parser();
     robot.update_path_planner();
+    taskYIELD();
   }
 }
 
-void main_core1() {
-  LOG_INFO("Starting servo controll loops on core 1...");
+// Runs on core 1: the real-time servo control loop.
+//
+// This computes its own dt from a free-running hardware timer (time_us_64), exactly as
+// the original bare-metal loop did, so its update rate is not tied to the FreeRTOS tick
+// rate. It is throttled only by however fast update_servo_controllers() itself runs.
+//
+// To instead run this at a fixed, known frequency (trading a bit of throughput for
+// predictable timing / headroom for other core-1 tasks), replace the body with a
+// vTaskDelayUntil() against a target period, e.g.:
+//   const TickType_t period = pdMS_TO_TICKS(1); // 1kHz
+//   TickType_t last_wake = xTaskGetTickCount();
+//   while (true) {
+//     ...
+//     vTaskDelayUntil(&last_wake, period);
+//   }
+static void servo_task(void* /*params*/) {
+  LOG_INFO("Starting servo control loop on core %d...", portGET_CORE_ID());
 
   uint64_t last_time = time_us_64();
-  while(true) {
-    // get time and detla time
+  while (true) {
     uint64_t time_us = time_us_64();
-    float dt = float(time_us - last_time)*1e-6f;
+    float dt = float(time_us - last_time) * 1e-6f;
     last_time = time_us;
 
     // limit time delta
     dt = std::min(dt, 0.0001f);
 
-    // update servo loops
     robot.update_servo_controllers(dt);
+    taskYIELD();
   }
 }
 
-void setup() {
+static void hardware_init() {
   gpio_init(PIN_BUILTIN_LED);
   gpio_set_dir(PIN_BUILTIN_LED, GPIO_OUT);
-  
+
   led_blink(0, 0, 30, 3, 100);
-  // stdio_init_all();  // Initializes USB or UART stdio
   overclock();
-  // Serial.begin(921600);
+
   Logger::instance().begin(921600, false);
   #ifndef DEMO_MODE
-  while(!Serial);
+  while (!Serial);
   #endif
 
   set_led_color(50, 10, 0);
-  // auto* test = new KinematicModel_Delta3D(); test->test(); delete test;
 
   delay(100);  // Allow time for serial monitor to connect
-  
+
   LOG_INFO("Open Micro Stage Firmware: %s", FIRMWARE_VERSION);
-  LOG_INFO("System clock: %i Mhz", int32_t(clock_get_hz(clk_sys))/1000/1000);
+  LOG_INFO("System clock: %i Mhz", int32_t(clock_get_hz(clk_sys)) / 1000 / 1000);
 
   // LittleFS.format();
   if (!LittleFS.begin()) {
@@ -145,45 +166,46 @@ void setup() {
   } else {
     FSInfo fs_info;
     LittleFS.info(fs_info);
-    LOG_INFO("Mounting filesystem successfully [%i/%i bytes used]", 
+    LOG_INFO("Mounting filesystem successfully [%i/%i bytes used]",
              (int)fs_info.usedBytes, (int)fs_info.totalBytes);
-  } 
-
-  /*
-  LookupTable enc_to_pos_lut;
-  bool res = true; 
-  res &= load_lut_from_file(enc_to_pos_lut, "joint_0_pos_to_field_lut.dat");
-  for(uint32_t i=0; i<enc_to_pos_lut.size(); i++) {
-    float v = enc_to_pos_lut.get_entry(i);
-    Serial.printf("%i, %d\n", i, int(v*1000));
   }
 
-    // Close files
-  Serial.println("File print complete");*/
   LOG_INFO("Initializing device...");
   robot.init();
 
-  multicore_launch_core1(&main_core1);
-  sleep_ms(100);
-  
   set_led_color(0, 20, 0);
   LOG_INFO("Initialization finished");
   LOG_INFO(" ");
 
   gpio_put(PIN_BUILTIN_LED, 1);
-
-  return;
-
-  /*
-  rotencoder_wire.setSDA(PIN_ENCODER_SDA);
-  rotencoder_wire.setSCL(PIN_ENCODER_SCL);
-  rotencoder_wire.begin();
-  rotencoder_wire.setClock(1000000);
-  encoder.init();
-  encoder.set_hysteresis(0x4); //0x6);
-  */
 }
 
-void loop() {
-  main_core0();
+static void launch_tasks() {
+  TaskHandle_t command_task_handle = nullptr;
+  TaskHandle_t servo_task_handle = nullptr;
+
+  xTaskCreate(command_task, "CommandTask", COMMAND_TASK_STACK_SIZE, nullptr,
+              COMMAND_TASK_PRIORITY, &command_task_handle);
+  xTaskCreate(servo_task, "ServoTask", SERVO_TASK_STACK_SIZE, nullptr,
+              SERVO_TASK_PRIORITY, &servo_task_handle);
+
+  #if (configNUMBER_OF_CORES > 1) && configUSE_CORE_AFFINITY
+  vTaskCoreAffinitySet(command_task_handle, (UBaseType_t)(1u << 0));  // core 0
+  vTaskCoreAffinitySet(servo_task_handle, (UBaseType_t)(1u << 1));    // core 1
+  #endif
+
+  vTaskStartScheduler();
+}
+
+int main() {
+  // stdio (USB CDC) is brought up once, here, for the whole application.
+  stdio_init_all();
+
+  hardware_init();
+  launch_tasks();
+
+  // vTaskStartScheduler() only returns on failure (e.g. out of heap for the idle/timer
+  // tasks).
+  while (true) { tight_loop_contents(); }
+  return 0;
 }

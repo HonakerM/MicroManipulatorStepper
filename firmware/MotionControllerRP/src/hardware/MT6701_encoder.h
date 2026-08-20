@@ -1,6 +1,7 @@
 #pragma once
 
-#include <Wire.h>
+#include "compat/Wire_compat.h"
+#include "utilities/math_constants.h"
 
 class MT6701Encoder {
   public:
@@ -23,5 +24,5 @@ class MT6701Encoder {
       int32_t last_raw_angle = -1;
 
       static constexpr int CPR = 16384;         // 14-bit resolution
-      static constexpr float RAW_TO_RAD = 2*PI / CPR;
+      static constexpr float RAW_TO_RAD = 2 * Constants::PI_F / CPR;
 };

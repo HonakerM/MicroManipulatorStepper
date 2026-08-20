@@ -6,8 +6,10 @@
 // --------------------------------------------------------------------------------------
 
 #include "logging.h"
-#include "Arduino.h"
-#include <stdarg.h>
+#include "compat/Serial_compat.h"
+#include "compat/Arduino_compat.h"
+#include <cstdarg>
+#include <cstdio>
 
 Logger& Logger::instance() {
   static Logger logger;

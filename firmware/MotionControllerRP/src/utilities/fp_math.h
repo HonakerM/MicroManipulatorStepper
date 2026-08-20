@@ -13,7 +13,7 @@
 
 // #define CHECK_FP_MATH_ERRORS
 #ifdef CHECK_FP_MATH_ERRORS
-  #include "Arduino.h"
+  #include "compat/Serial_compat.h"
 #endif
 
 /**

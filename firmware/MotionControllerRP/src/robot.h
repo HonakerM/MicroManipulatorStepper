@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include "hardware/sync.h"
+
 #include "utilities/logging.h"
 #include "utilities/frequency_counter.h"
 #include "hardware/MT6701_encoder.h"

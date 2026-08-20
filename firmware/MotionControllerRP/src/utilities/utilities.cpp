@@ -5,7 +5,7 @@
 // Author:  M. S. (diffraction limited)
 // --------------------------------------------------------------------------------------
 
-#include <LittleFS.h>
+#include "compat/LittleFS_compat.h"
 #include <string>
 
 #include "logging.h"

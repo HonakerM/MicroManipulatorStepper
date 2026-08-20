@@ -5,7 +5,8 @@
 // Author:  M. S. (diffraction limited)
 // --------------------------------------------------------------------------------------
 
-#include <LittleFS.h> 
+#include "compat/LittleFS_compat.h"
+#include "compat/Serial_compat.h"
 #include "robot.h"
 #include "hw_config.h"
 #include "utilities/logging.h"
@@ -21,8 +22,10 @@
 constexpr int SPINLOCK_ID_SHARED_DATA = 0;
 constexpr int SPINLOCK_ID_JOINTS = 1;
 
-#include <NeoPixelConnect.h>
-NeoPixelConnect led(PIN_BUILTIN_LED, 1);
+// NOTE: this project previously instantiated a NeoPixelConnect `led` object here, but
+// nothing in the codebase actually used it -- it was dead code left over from the
+// Arduino/arduino-pico port and has been dropped along with the NeoPixelConnect
+// dependency. See set_led_color() in main.cpp if you want status-LED support back.
 
 //*** FUNCTION **************************************************************************
 
@@ -341,7 +344,7 @@ bool Robot::home(uint8_t joint_mask, float retract_angles[NUM_JOINTS]) {
     if(((joint_mask>>i)&1) == 0) continue;
     LOG_DEBUG("start homing axis %i", i);
     homing_controller[i].start(joints[i]->servo_controller, 
-                               -HOMING_VELOCITY, 360.0f*DEG_TO_RAD, HOMING_CURRENT,
+                               -HOMING_VELOCITY, 360.0f*Constants::DEG2RAD, HOMING_CURRENT,
                                ENCODER_ANGLE_TO_ROTOR_ANGLE, retract_angles[i]);
   }
 

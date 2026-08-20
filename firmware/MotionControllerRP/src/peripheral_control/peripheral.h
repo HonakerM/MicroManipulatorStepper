@@ -1,6 +1,6 @@
 #pragma once
 #include "utilities/degrees.h"
-#include <Wire.h>
+#include "compat/Wire_compat.h"
 
 //*** Classes *************************************************************************
 

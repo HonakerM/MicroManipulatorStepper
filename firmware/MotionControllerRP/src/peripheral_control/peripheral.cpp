@@ -1,6 +1,8 @@
 #include <hw_config.h>
 #include "peripheral.h"
 #include <utilities/logging.h>
+#include "compat/Serial_compat.h"
+#include "compat/Arduino_compat.h"
 
 namespace {
 const char* i2c_status_to_string(uint8_t status) {

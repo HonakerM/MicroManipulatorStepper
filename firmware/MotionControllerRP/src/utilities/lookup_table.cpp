@@ -6,7 +6,7 @@
 // --------------------------------------------------------------------------------------
 
 #include <pico/stdlib.h>
-#include <LittleFS.h> 
+#include "compat/LittleFS_compat.h" 
 #include <algorithm> 
 
 #include "lookup_table.h"

@@ -5,11 +5,12 @@
 // Author:  M. S. (diffraction limited)
 // --------------------------------------------------------------------------------------
 
-#include <LittleFS.h> 
+#include "compat/LittleFS_compat.h"
 #include "robot_joint.h"
 #include "hw_config.h"
 #include "utilities/logging.h"
 #include "utilities/utilities.h"
+#include "utilities/math_constants.h"
 #include "servo_control/homing_controller.h"
 #include "servo_control/actuator_calibration.h"
 
@@ -55,7 +56,7 @@ bool RobotJoint::calibrate(bool print_measurements) {
 
   HomingController homing_controller;
   bool homing_ok = homing_controller.run_blocking(servo_controller, -HOMING_VELOCITY, 
-                                                  360.0f*DEG_TO_RAD, HOMING_CURRENT,
+                                                  360.0f*Constants::DEG2RAD, HOMING_CURRENT,
                                                   ENCODER_ANGLE_TO_ROTOR_ANGLE,
                                                   CALIBRATION_RETRACTION_FIELD_ANGLE);
   if(homing_ok == false) {
@@ -69,7 +70,7 @@ bool RobotJoint::calibrate(bool print_measurements) {
   bool ok = measure_calibration_data(encoder_raw_to_motor_pos_lut, 
                                      motor_pos_to_field_angle_lut, 
                                      *servo_controller, 
-                                     CALIBRATION_RANGE*DEG_TO_RAD,
+                                     CALIBRATION_RANGE*Constants::DEG2RAD,
                                      CALIBRATION_FIELD_VELOCITY, 
                                      256,
                                      print_measurements);
