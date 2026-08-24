@@ -126,7 +126,7 @@ void setup() {
   // stdio_init_all();  // Initializes USB or UART stdio
   overclock();
   // Serial.begin(921600);
-  Logger::instance().begin(921600, false);
+  Logger::instance().begin(921600, REQUIRE_SERIAL_ON_STARTUP);
 
   set_led_color(50, 10, 0);
   // auto* test = new KinematicModel_Delta3D(); test->test(); delete test;

@@ -69,6 +69,12 @@ constexpr float VEL_KI = 90.0f;
 // also requires the initialization of the correct number of 'RobotJoint' objects
 // in the Robtos init method.
 
+
+//--- CONNECTION ------------------------------------------------------------------
+
+#define REQUIRE_SERIAL_ON_STARTUP false
+
+
 //--- PERIPHERAL ------------------------------------------------------------------
 #define PERIPHERAL_ENABLED true
 #define PERIPHERAL_REQUIRED false
