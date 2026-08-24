@@ -4,7 +4,7 @@ import csv
 
 # create interface and connect
 oms = OpenMicroStageInterface(show_communication=True, show_log_messages=True)
-oms.connect('COM9')
+oms.connect('COM7')
 oms.read_device_state_info()
 import os
 
@@ -16,9 +16,10 @@ def get_user_mode():
         print("1. Calibration")
         print("2. Set Move")
         print("3. Free Move")
-        print("4. Exit")
+        print("4. Home Single Axis")
+        print("5. Exit")
         
-        choice = input("Select mode (1-4): ").strip()
+        choice = input("Select mode (1-5): ").strip()
         
         if choice == '1':
             return 'calibration'
@@ -27,9 +28,11 @@ def get_user_mode():
         elif choice == '3':
             return 'free_move'
         elif choice == '4':
+            return 'home_axis'
+        elif choice == '5':
             return 'exit'
         else:
-            print("Invalid choice. Please select 1-4.")
+            print("Invalid choice. Please select 1-5.")
 
 
 def run_calibration(oms):
@@ -169,6 +172,29 @@ def run_free_move(oms):
     oms.read_device_state_info()
 
 
+def run_home_axis(oms):
+    """Repeatedly home a single axis chosen by the user."""
+    while True:
+        user_input = input("Enter axis to home (0-2, or 'q' to quit): ").strip().lower()
+
+        if user_input in {'q', 'quit', 'exit'}:
+            break
+
+        try:
+            axis = int(user_input)
+        except ValueError:
+            print("Invalid axis. Please enter 0, 1, or 2.")
+            continue
+
+        if axis not in [0, 1, 2]:
+            print("Invalid axis. Please enter 0, 1, or 2.")
+            continue
+
+        oms.home(axis_list=[axis])
+        oms.wait_for_stop()
+        print(f"Axis {axis} homed.")
+
+
 # Main - run once and exit
 mode = get_user_mode()
 
@@ -178,3 +204,5 @@ elif mode == 'set_move':
     run_set_move(oms)
 elif mode == 'free_move':
     run_free_move(oms)
+elif mode == 'home_axis':
+    run_home_axis(oms)

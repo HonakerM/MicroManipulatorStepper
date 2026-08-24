@@ -127,9 +127,6 @@ void setup() {
   overclock();
   // Serial.begin(921600);
   Logger::instance().begin(921600, false);
-  #ifndef DEMO_MODE
-  while(!Serial);
-  #endif
 
   set_led_color(50, 10, 0);
   // auto* test = new KinematicModel_Delta3D(); test->test(); delete test;
