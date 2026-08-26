@@ -1,14 +1,11 @@
 import matplotlib.pyplot as plt
-<<<<<<< HEAD:software/PythonAPI/calibration_plotter.py
 import numpy as np
 plt.rcParams['figure.dpi'] = 200
-=======
 
-from open_micro_stage import OpenMicroStageInterface
+from open_micro_stage_api import OpenMicroStageInterface
 
 plt.rcParams["figure.dpi"] = 200
 
->>>>>>> open_micro_lib:software/PythonAPI/open_micro_stage_api/calibration_plotter.py
 
 def plot_calibration_data(ax_encoder_counts, ax_field_angel, label, data):
     # Plot on the provided Axes object

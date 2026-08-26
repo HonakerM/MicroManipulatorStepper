@@ -147,61 +147,59 @@ bool LookupTable::init_interpolating(std::vector<std::pair<float, float>> in_out
   return true;
 }
 
-bool LookupTable::optimize_lut(std::vector<std::pair<float, float>> in_out_pairs, float& rms_error) {
+bool LookupTable::optimize_lut(const std::vector<std::pair<float, float>>& in_out_pairs,
+                               float& rms_error) {
   if (lookup_table.empty() || in_out_pairs.empty())
     return false;
 
-  LOG_DEBUG("Optimizing lookup table...");
-
-  const float learning_rate = 0.02f;
-  const int max_iterations = 1000;
   const int N = static_cast<int>(lookup_table.size());
+  const int P = static_cast<int>(in_out_pairs.size());
 
-  // Gradient descent loop
+  // Precompute per-entry curvature: sum of w^2 over every pair touching that entry.
+  std::vector<float> curv(N, 0.0f);
+  for (const auto& pr : in_out_pairs) {
+    int ia, ib; float wa, wb;
+    linear_interpolate(pr.first, ia, ib, wa, wb);
+    if (ia < 0 || ia >= N || ib < 0 || ib >= N) {
+      LOG_DEBUG("interp index out of range: x=%f -> %d,%d", pr.first, ia, ib);
+      return false;
+    }
+    curv[ia] += wa * wa;
+    curv[ib] += wb * wb;
+  }
+
+  const float lr = 0.7f;              // 1.0 = exact Jacobi step; 0.7 damps the coupling
+  const int max_iterations = 200;
   std::vector<float> gradients(N, 0.0f);
   float total_loss = 0.0f;
+
   for (int iter = 0; iter < max_iterations; iter++) {
-    // Accumulate gradients for each pair
     total_loss = 0.0f;
-    for (const auto &pair : in_out_pairs) {
-      float x = pair.first;
-      float y_target = pair.second;
+    for (const auto& pr : in_out_pairs) {
+      int ia, ib; float wa, wb;
+      linear_interpolate(pr.first, ia, ib, wa, wb);
 
-      // Compute interpolation indices and weights
-      int idx_a, idx_b;
-      float w_a, w_b;
-      linear_interpolate(x, idx_a, idx_b, w_a, w_b);
-
-      // Current output from LUT
-      float y_pred = w_a * lookup_table[idx_a] + w_b * lookup_table[idx_b];
-      float error = y_pred - y_target;
-
+      float y_pred = wa * lookup_table[ia] + wb * lookup_table[ib];
+      float error  = y_pred - pr.second;
       total_loss += error * error;
 
-      // Gradient of loss wrt y_pred = 2 * error
-      float grad_loss = 2.0f * error;
-
-      // Distribute gradient to LUT entries weighted by interpolation weights
-      gradients[idx_a] += grad_loss * w_a;
-      gradients[idx_b] += grad_loss * w_b;
-
-      //if(iter == max_iterations-1)
-      //  LOG_DEBUG("error=%f", iter, error);
+      gradients[ia] += error * wa;    // factor of 2 dropped from grad and curv alike
+      gradients[ib] += error * wb;
     }
 
-    // Update LUT entries
     for (int i = 0; i < N; i++) {
-      lookup_table[i] -= learning_rate * gradients[i];
+      if (curv[i] > 1e-6f)            // entries with no data keep their initial value
+        lookup_table[i] -= lr * gradients[i] / curv[i];
       gradients[i] = 0.0f;
     }
 
-    //if(iter%100 == 0)
-    //  LOG_DEBUG("iteration %04i: rms=%f", iter, sqrtf(total_loss));
+    if (iter % 10 == 0)
+      LOG_DEBUG("iter %04i: rms=%f", iter, (double)sqrtf(total_loss / P));
   }
 
-  rms_error = sqrt(total_loss);
+  rms_error = sqrtf(total_loss / static_cast<float>(P));
   LOG_DEBUG("Optimizing lookup table finished: rms_error=%f", rms_error);
-
+ 
   return true;
 }
 

@@ -407,7 +407,7 @@ class OpenMicroStageInterface:
             cmd += " S"
         res, msg = self.send_command(cmd, 90)
 
-        calibration_data = self._parse_table_data(msg, 3)
+        calibration_data = self._parse_table_data(msg, 4)
         return res, calibration_data
 
     @synchronized_action

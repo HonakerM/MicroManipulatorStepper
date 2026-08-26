@@ -16,7 +16,7 @@ class IKinematicModel {
     virtual ~IKinematicModel() {};
 
     // returns the number of joints
-    virtual int get_joint_count();
+    virtual int get_joint_count() = 0;
 
     // computes the end effector pose from joint positions
     virtual bool foreward(const float* joint_positions, Pose6DF& pose) = 0;

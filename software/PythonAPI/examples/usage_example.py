@@ -44,10 +44,12 @@ def run_calibration(oms):
             return
         
         _, data = oms.calibrate_joint(axis, save_result=True)
-        
+
+
+        transposed_data = [list(row) for row in zip(*data)]
         with open(f'output_{axis}.csv', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
-            writer.writerows(data)
+            writer.writerows(transposed_data)
         
         print(f"Calibration complete. Data saved to output_{axis}.csv")
     except ValueError:
@@ -60,33 +62,33 @@ def run_set_move(oms):
     if user_input.lower() != 's':
         oms.home()
 
-    input("Press Enter to move 90 degrees")
-    oms.set_rotation(90.0)
+    # input("Press Enter to move 90 degrees")
+    # oms.set_rotation(90.0)
 
-    time.sleep(1)
-    input("Press Enter to move 180 degrees")
-    oms.set_rotation(180.0)
+    # time.sleep(1)
+    # input("Press Enter to move 180 degrees")
+    # oms.set_rotation(180.0)
     
-    time.sleep(1)
-    input("Press Enter to move 270 degrees")
-    oms.set_rotation(270.0)
+    # time.sleep(1)
+    # input("Press Enter to move 270 degrees")
+    # oms.set_rotation(270.0)
     
-    time.sleep(1)
-    input("Press Enter to move back to 0 degrees")
-    oms.set_rotation(0.0)
+    # time.sleep(1)
+    # input("Press Enter to move back to 0 degrees")
+    # oms.set_rotation(0.0)
 
-    # input("Press Enter to move a little bit")
-    # x, y, z = oms.read_current_position()
-    # oms.set_pose(x+0.01, y+0.01, z)
-    # print("Moved via software")
+    input("Press Enter to move a little bit")
+    x, y, z = oms.read_current_position()
+    oms.set_pose(x+0.01, y+0.01, z)
+    print("Moved via software")
 
-    # input("Press Enter to move to 3,4,z")
-    # oms.set_pose(3.0, 4.0, z)
-    # oms.wait_for_stop()
+    input("Press Enter to move to 3,4,z")
+    oms.set_pose(3.0, 4.0, z)
+    oms.wait_for_stop()
 
-    # input("Press Enter to move to 0,0,0")
-    # oms.set_pose(0.0, 0.0, z)
-    # oms.wait_for_stop()
+    input("Press Enter to move to 0,0,0")
+    oms.set_pose(0.0, 0.0, z)
+    oms.wait_for_stop()
 
     oms.read_device_state_info()
 
@@ -110,20 +112,24 @@ def run_rotation(oms):
             if user_input.lower() == 'i':
                 oms.read_device_state_info()
                 continue
-            
-            if "+" in user_input:
-                user_input = user_input.replace("+", ",")
-            x_str, y_str, z_str = user_input.split(',')
-            x_target = float(x_str.strip())
-            y_target = float(y_str.strip())
-            z_target = float(z_str.strip())
 
-            print(f"Moving to X:{x_target}, Y:{y_target}, Z:{z_target}")
-            oms.set_pose(x_target, y_target, z_target)
-            oms.wait_for_stop()
+            try:
+                if "+" in user_input:
+                    user_input = user_input.replace("+", ",")
+                x_str, y_str, z_str = user_input.split(',')
+                x_target = float(x_str.strip())
+                y_target = float(y_str.strip())
+                z_target = float(z_str.strip())
 
+                print(f"Moving to X:{x_target}, Y:{y_target}, Z:{z_target}")
+                oms.set_pose(x_target, y_target, z_target)
+                oms.wait_for_stop()
+
+            except ValueError:
+                print("Invalid input. Use format: X,Y,Z or X+Y+Z")
         except ValueError:
-            print("Invalid input. Use format: X,Y,Z or X+Y+Z")
+            print("Invalid data from device. Please check encoder positioning")
+            break
         except KeyboardInterrupt:
             print("\nExiting free move mode.")
             break
