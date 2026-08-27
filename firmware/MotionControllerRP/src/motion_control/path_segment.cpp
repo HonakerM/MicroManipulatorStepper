@@ -288,7 +288,9 @@ JointSpacePathSegmentGenerator::JointSpacePathSegmentGenerator(
   }
 
   // evaluate inverse kinematic model to et start joint positions
-  kinematic_model->inverse(path_segment->start_pose, current_joint_pos);
+  if (!kinematic_model->inverse(path_segment->start_pose, current_joint_pos)) {
+    LOG_ERROR("Inverse kinematic failed when generating first segment");
+  }
 }
 
 bool JointSpacePathSegmentGenerator::generate_next(JointSpacePathSegment& js_path_segment) {
@@ -312,7 +314,10 @@ bool JointSpacePathSegmentGenerator::generate_next(JointSpacePathSegment& js_pat
 
   // evaluate inverse kinematic model here
   float next_joint_pos[NUM_JOINTS];
-  kinematic_model->inverse(seg_end_pose, next_joint_pos);
+  if(!kinematic_model->inverse(seg_end_pose, next_joint_pos)) {
+    LOG_ERROR("Inverse kinematic failed when generating next segment");
+    return false;
+  }
   
   // create joint space path segment
   float duration = current_time-initial_time;

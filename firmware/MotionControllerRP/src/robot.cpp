@@ -277,7 +277,10 @@ void Robot::enable_servo_control(bool enable) {
 void Robot::set_pose(const Pose6DF& pose) {
   // run inverse kinematic and compute joint positions
   float joint_positions[NUM_JOINTS];
-  kinematic_model->inverse(pose, joint_positions);
+  if(!kinematic_model->inverse(pose, joint_positions)) {
+    LOG_ERROR("Inverse kinematic failed when setting pose");
+    return;
+  }
 
   while(true) {
     // Attempt to acquire spinlock non-blocking and set new target data for the servo loops
