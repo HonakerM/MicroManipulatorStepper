@@ -274,6 +274,44 @@ void Robot::enable_servo_control(bool enable) {
   spin_unlock_unsafe(joints_spin_lock);
 }
 
+/**
+ * Returns true if 'pose' can actually be reached: the inverse kinematics must succeed
+ * AND every resulting joint angle must lie inside the range covered by that joint's
+ * calibration data. Outside that range the lookup tables silently clamp, which stalls
+ * commutation and makes the motor buzz.
+ *
+ * On failure: bad_joint = -1 means the pose is outside the geometric workspace,
+ * bad_joint >= 0 means that joint would leave its calibrated range (bad_angle in rad).
+ */
+bool Robot::is_pose_reachable(const Pose6DF& pose, int& bad_joint, float& bad_angle) {
+  bad_joint = -1;
+  bad_angle = 0.0f;
+
+  float joint_positions[NUM_JOINTS];
+  if(kinematic_model->inverse(pose, joint_positions) == false)
+    return false;
+
+  // stay this far away from the ends of the calibration data
+  const float margin = 1.0f*Constants::DEG2RAD;
+
+  for(int i=0; i<NUM_JOINTS; i++) {
+    const LookupTable& lut = joints[i]->servo_controller->get_pos_to_field_lut();
+    if(lut.size() < 2)
+      continue;   // joint not calibrated yet - nothing to check against
+
+    float lo, hi;
+    lut.get_intput_range(lo, hi);   // note: typo is in lookup_table.h
+
+    if(joint_positions[i] < lo + margin || joint_positions[i] > hi - margin) {
+      bad_joint = i;
+      bad_angle = joint_positions[i];
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void Robot::set_pose(const Pose6DF& pose) {
   // run inverse kinematic and compute joint positions
   float joint_positions[NUM_JOINTS];
@@ -678,6 +716,27 @@ void Robot::process_motion_command(const GCodeCommand& cmd, std::string& reply) 
     end_pose.rotation = current_pose.rotation;
   }
 
+  // reject unreachable targets before anything is queued or current_pose is updated
+  int bad_joint;
+  float bad_angle;
+  if(is_pose_reachable(end_pose, bad_joint, bad_angle) == false) {
+    char msg[160];
+    if(bad_joint < 0) {
+      snprintf(msg, sizeof(msg),
+               "error: target (%.3f, %.3f, %.3f) is outside the workspace\n",
+               end_pose.translation.x, end_pose.translation.y, end_pose.translation.z);
+    } else {
+      float lo, hi;
+      joints[bad_joint]->servo_controller->get_pos_to_field_lut().get_intput_range(lo, hi);
+      snprintf(msg, sizeof(msg),
+               "error: joint %i would need %.2f deg, calibrated range is %.2f..%.2f deg\n",
+               bad_joint, bad_angle*Constants::RAD2DEG,
+               lo*Constants::RAD2DEG, hi*Constants::RAD2DEG);
+    }
+    reply = msg;
+    return;
+  }
+
   // create path segment
   CartesianPathSegment path_segment(current_pose, 
                                     end_pose, 
@@ -718,6 +777,27 @@ void Robot::process_set_pose_command(const GCodeCommand& cmd, std::string& reply
     pose.rotation = QuaternionF::from_rot_vec(rot_vec);
   } else {
     pose.rotation = current_pose.rotation;
+  }
+
+  // reject unreachable targets before anything is queued or current_pose is updated
+  int bad_joint;
+  float bad_angle;
+  if(is_pose_reachable(pose, bad_joint, bad_angle) == false) {
+    char msg[160];
+    if(bad_joint < 0) {
+      snprintf(msg, sizeof(msg),
+               "error: target (%.3f, %.3f, %.3f) is outside the workspace\n",
+               pose.translation.x, pose.translation.y, pose.translation.z);
+    } else {
+      float lo, hi;
+      joints[bad_joint]->servo_controller->get_pos_to_field_lut().get_intput_range(lo, hi);
+      snprintf(msg, sizeof(msg),
+               "error: joint %i would need %.2f deg, calibrated range is %.2f..%.2f deg\n",
+               bad_joint, bad_angle*Constants::RAD2DEG,
+               lo*Constants::RAD2DEG, hi*Constants::RAD2DEG);
+    }
+    reply = msg;
+    return;
   }
 
   // set the current pose und update target angles for servo loops

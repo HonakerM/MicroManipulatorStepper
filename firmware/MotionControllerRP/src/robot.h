@@ -65,6 +65,7 @@ class Robot : public ICommandProcessor {
     void update_command_parser();            // called from main loop
     void update_path_planner();              // called from main loop
     void update_servo_controllers(float dt); // called from seperate cpu-core
+    bool is_pose_reachable(const Pose6DF& pose, int& bad_joint, float& bad_angle); // called from seperate cpu-core
 
     void set_pose(const Pose6DF& pos);
     Pose6DF pose_from_joint_angles();

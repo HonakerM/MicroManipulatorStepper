@@ -122,7 +122,10 @@ def run_rotation(oms):
                 z_target = float(z_str.strip())
 
                 print(f"Moving to X:{x_target}, Y:{y_target}, Z:{z_target}")
-                oms.set_pose(x_target, y_target, z_target)
+                resp = oms.set_pose(x_target, y_target, z_target)
+                print("test and resp:", resp)
+                if not resp:
+                    print(f"Failed to move to target position. The pose may be unreachable.")
                 oms.wait_for_stop()
 
             except ValueError:

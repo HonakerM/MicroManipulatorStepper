@@ -19,6 +19,9 @@ class SerialInterface:
         TIMEOUT = "timeout"
         BUSY = "busy"
 
+        def __bool__(self):
+            return self == SerialInterface.ReplyStatus.OK
+
     class LogLevel(Enum):
         DEBUG = "debug"
         INFO = "info"
