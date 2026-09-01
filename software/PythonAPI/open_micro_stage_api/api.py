@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import re
 import threading
 import time
@@ -7,6 +8,7 @@ import warnings
 
 import numpy as np
 import serial
+from serial.tools import list_ports
 from colorama import Fore, Style
 
 # --- SerialInterface --------------------------------------------------------------------------------------------------
@@ -27,6 +29,18 @@ class SerialInterface:
         INFO = "info"
         WARNING = "warning"
         ERROR = "error"
+
+    @dataclass
+    class SerialDevice:
+        port: str
+        description: str | None
+        manufacturer: str | None
+        product: str | None
+        serial_number: str | None
+        vid: int | None
+        pid: int | None
+        location: str | None
+        hwid: str | None
 
     # Static mapping from prefix to LogLevel
     log_level_prefix_map = {
@@ -190,7 +204,6 @@ class SerialInterface:
             self.serial.flush()
 
             # Wait for completion
-            timeout = 180
             end_time = time.time() + timeout
             while self._response_status is None:
                 remaining = end_time - time.time()
@@ -213,6 +226,32 @@ class SerialInterface:
         if self.serial and self.serial.is_open:
             self.serial.close()
 
+
+    @staticmethod
+    def list_serial_devices() -> list[SerialDevice]:
+        """List all available serial devices connected to the system.
+
+        Returns:
+            list[SerialDevice]: Information about each detected serial device.
+        """
+        devices = []
+
+        for port in list_ports.comports():
+            devices.append(
+                SerialInterface.SerialDevice(
+                    port=port.device,
+                    description=port.description,
+                    manufacturer=port.manufacturer,
+                    product=port.product,
+                    serial_number=port.serial_number,
+                    vid=port.vid,
+                    pid=port.pid,
+                    location=port.location,
+                    hwid=port.hwid,
+                )
+            )
+
+        return devices
 
 # --- OpenMicroStageInterface ------------------------------------------------------------------------------------------
 
@@ -707,11 +746,21 @@ class OpenMicroStageInterface:
         except ValueError:
             return 0.0
 
-    def send_command(self, cmd: str, timeout: float = 5):
+    def send_command(self, cmd: str, timeout_s: float = 5, **kwargs):
         if self.serial is None:
             return SerialInterface.ReplyStatus.ERROR, "No connection to device"
+        timeout = kwargs.pop("timeout", timeout_s)
+        timeout = kwargs.pop("timeout_s", timeout)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         res, msg = self.serial.send_command(cmd, timeout)
         return res, msg
+
+    def send_custom_command(self, cmd: str, timeout_s: float = 5, **kwargs):
+        """Send an arbitrary command string directly to the device."""
+        return self.send_command(cmd, timeout_s=timeout_s, **kwargs)
 
     @staticmethod
     def _parse_table_data(data_string, cols):

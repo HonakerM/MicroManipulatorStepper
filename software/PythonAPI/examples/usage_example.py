@@ -1,12 +1,69 @@
 from open_micro_stage_api import OpenMicroStageInterface
+from open_micro_stage_api.api import SerialInterface
 import time
 import csv
 
-# create interface and connect
-oms = OpenMicroStageInterface(show_communication=True, show_log_messages=True)
-oms.connect('COM7')
-oms.read_device_state_info()
-import os
+
+
+def select_serial_device():
+    """List available serial devices and prompt the user to select one."""
+
+    devices = SerialInterface.list_serial_devices()
+
+    if not devices:
+        print("No serial devices found.")
+        return None
+
+    print("\n=== Available Serial Devices ===")
+    print(
+        f"{'#':<4}"
+        f"{'PORT':<12}"
+        f"{'DESCRIPTION':<35}"
+        f"{'MANUFACTURER':<25}"
+        f"{'VID:PID':<12}"
+        f"{'SERIAL NUMBER':<25}"
+    )
+    print("-" * 113)
+
+    for i, device in enumerate(devices, start=1):
+        vid_pid = (
+            f"{device.vid:04X}:{device.pid:04X}"
+            if device.vid is not None and device.pid is not None
+            else "N/A"
+        )
+
+        print(
+            f"{i:<4}"
+            f"{device.port:<12}"
+            f"{(device.description or 'N/A')[:34]:<35}"
+            f"{(device.manufacturer or 'N/A')[:24]:<25}"
+            f"{vid_pid:<12}"
+            f"{(device.serial_number or 'N/A')[:24]:<25}"
+        )
+
+    print()
+
+    while True:
+        choice = input(
+            f"Select device (1-{len(devices)}) or 'q' to quit: "
+        ).strip()
+
+        if choice.lower() in {"q", "quit", "exit"}:
+            return None
+
+        try:
+            index = int(choice) - 1
+        except ValueError:
+            print("Invalid selection. Please enter a number.")
+            continue
+
+        if 0 <= index < len(devices):
+            selected = devices[index]
+            print(f"Selected {selected.port}: {selected.description}")
+            return selected
+
+        print(f"Invalid selection. Please select 1-{len(devices)}.")
+
 
 
 def get_user_mode():
@@ -17,9 +74,10 @@ def get_user_mode():
         print("2. Set Move")
         print("3. Free Move")
         print("4. Home Single Axis")
-        print("5. Exit")
+        print("5. Send Raw Command")
+        print("6. Exit")
         
-        choice = input("Select mode (1-5): ").strip()
+        choice = input("Select mode (1-6): ").strip()
         
         if choice == '1':
             return 'calibration'
@@ -30,9 +88,11 @@ def get_user_mode():
         elif choice == '4':
             return 'home_axis'
         elif choice == '5':
+            return 'raw_command'
+        elif choice == '6':
             return 'exit'
         else:
-            print("Invalid choice. Please select 1-5.")
+            print("Invalid choice. Please select 1-6.")
 
 
 def run_calibration(oms):
@@ -204,6 +264,42 @@ def run_home_axis(oms):
         print(f"Axis {axis} homed.")
 
 
+def run_raw_command(oms):
+    """Send arbitrary serial commands to the device."""
+    while True:
+        user_input = input("Enter command to send (or 'q' to quit): ").strip()
+
+        if user_input.lower() in {'q', 'quit', 'exit'}:
+            break
+
+        if not user_input:
+            print("Please enter a command string.")
+            continue
+
+        result, response = oms.send_custom_command(user_input)
+        print(f"Status: {result.name}")
+        if response:
+            print(response)
+
+
+
+
+# Select serial device
+device = select_serial_device()
+
+if device is None:
+    print("No serial device selected. Exiting.")
+    exit(0)
+
+# Create interface and connect
+oms = OpenMicroStageInterface(
+    show_communication=True,
+    show_log_messages=True,
+)
+
+oms.connect(device.port)
+oms.read_device_state_info()
+
 # Main - run once and exit
 mode = get_user_mode()
 
@@ -215,3 +311,5 @@ elif mode == 'free_move':
     run_free_move(oms)
 elif mode == 'home_axis':
     run_home_axis(oms)
+elif mode == 'raw_command':
+    run_raw_command(oms)
