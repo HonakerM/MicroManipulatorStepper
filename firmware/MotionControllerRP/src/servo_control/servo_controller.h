@@ -94,6 +94,13 @@ class ServoController {
     PIDController pos_controller;
     PIDController velocity_controller;
 
+    uint32_t field_lut_clamp_count = 0;
+    uint32_t enc_lut_clamp_count = 0;
+    float    last_out_of_range_pos = 0.0f;
+    float max_abs_pos_error = 0.0f;
+    float max_abs_output = 0.0f;
+    uint32_t stall_count = 0;
+    float stall_pos = 0.0f;
   private:
     ENCODER_TYPE& encoder;
     MOTOR_DRIVER_TYPE& motor_driver;

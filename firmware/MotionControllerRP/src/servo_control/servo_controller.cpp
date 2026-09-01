@@ -90,6 +90,17 @@ void ServoController::update(float target_motor_pos, float dt, float one_over_dt
 
   // convert encoder angle to motor pos using LUT and compute field angle
   motor_pos = encoder_angle_to_motor_pos(encoder_angle_raw);
+
+  // detect operation outside the calibrated LUT domain - the LUT clamps silently
+  {
+    float lo, hi;
+    motor_pos_to_field_angle_lut.get_intput_range(lo, hi);
+    if(motor_pos_to_field_angle_lut.size() >= 2 && (motor_pos < lo || motor_pos > hi)) {
+      field_lut_clamp_count++;
+      last_out_of_range_pos = motor_pos;
+    }
+  }
+
   float field_angle = motor_pos_to_field_angle(motor_pos);
 
   // position controll loop
@@ -103,6 +114,21 @@ void ServoController::update(float target_motor_pos, float dt, float one_over_dt
 
   // torque controll loop
   output = torque_target;
+
+  float ae = fabsf(pos_error);
+  if(ae > max_abs_pos_error) max_abs_pos_error = ae;
+  float ao = fabsf(output);
+  if(ao > max_abs_output) max_abs_output = ao;
+
+  bool saturated = fabsf(output) > 1.40f;
+  bool stopped   = fabsf(velocity) < 0.01f;
+  if(saturated && stopped && fabsf(pos_error) > 0.5f*Constants::DEG2RAD) {
+    if(stall_count == 0) stall_pos = motor_pos;   // record where it first stuck
+    stall_count++;
+  } else {
+    stall_count = 0;
+  }
+
 
   // set new field direction
   // motor_driver.set_amplitude(std::clamp(abs(output*10.0f), 0.1f, 0.5f), false);

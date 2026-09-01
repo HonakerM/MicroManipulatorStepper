@@ -239,6 +239,10 @@ bool Robot::update_motion_controller_isr(repeating_timer_t* timer) {
  */
 void Robot::update_servo_controllers(float dt) {
   float one_over_dt = 1.0f/dt;
+  // update settings
+  if(dt >= max_servo_dt) max_servo_dt = dt;
+  if(dt <= min_servo_dt) min_servo_dt = dt;
+
 
   // update axis target position and velocity from shared data
   spin_lock_unsafe_blocking(shared_data.lock);
@@ -252,6 +256,9 @@ void Robot::update_servo_controllers(float dt) {
   spin_lock_unsafe_blocking(joints_spin_lock);
   for(int i=0; i<NUM_JOINTS; i++) {
     joints[i]->update(dt, one_over_dt);
+    if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT ) {
+      LOG_INFO("Joint-%i: motor stall detected at pos=%f deg. Please rerun homing", i, joints[i]->servo_controller->stall_pos*Constants::RAD2DEG);
+    }
   }
   spin_unlock_unsafe(joints_spin_lock);
 
@@ -316,7 +323,7 @@ void Robot::set_pose(const Pose6DF& pose) {
   // run inverse kinematic and compute joint positions
   float joint_positions[NUM_JOINTS];
   if(!kinematic_model->inverse(pose, joint_positions)) {
-    LOG_ERROR("Inverse kinematic failed when setting pose");
+    LOG_INFO("Inverse kinematic failed when setting pose");
     return;
   }
 
@@ -350,7 +357,7 @@ Pose6DF Robot::pose_from_joint_angles() {
   Pose6DF pose;
   bool ok = kinematic_model->foreward(joint_pos, pose);
   if(ok == false)
-    LOG_ERROR("Foreward kinematic failed");
+    LOG_INFO("Foreward kinematic failed");
 
   return pose;
 }
@@ -411,7 +418,7 @@ bool Robot::home(uint8_t joint_mask, float retract_angles[NUM_JOINTS]) {
     if(homing_controller[i].is_successful()) {
       joints[i]->is_homed = true;
     } else {
-      LOG_ERROR("homing joint %i failed", i);
+      LOG_INFO("homing joint %i failed", i);
       homing_successful = false;
     }
 
@@ -679,6 +686,64 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
     reply += "ok\n";
     return;
   }
+
+  // diagnostics report
+  if(cmd.get_command() == "M60") {
+    for(int i=0; i<NUM_JOINTS; i++) {
+      const auto& d  = joints[i]->encoder->get_diagnostics();
+      auto* sc = joints[i]->servo_controller;
+
+      float lo=0, hi=0;
+      sc->get_pos_to_field_lut().get_intput_range(lo, hi);
+
+      reply += "Joint " + std::to_string(i) + ":\n";
+      reply += "  slips=" + std::to_string(d.slip_count);
+      reply += "  first_slip_delta=" + std::to_string(d.first_slip_delta);
+      reply += "  at=" + std::to_string((uint32_t)(d.first_slip_us/1000)) + " ms\n";
+      reply += "  max_delta=" + std::to_string(d.max_abs_delta);
+      reply += " of half_window=" + std::to_string(MT6835_CPR>>1) + "\n";
+      reply += "  max_read_gap=" + std::to_string(d.max_read_gap_us) + " us\n";
+      reply += "  lut_clamps=" + std::to_string(sc->field_lut_clamp_count);
+      reply += "  last_oor_pos=" + std::to_string(sc->last_out_of_range_pos*Constants::RAD2DEG);
+      reply += " deg  range=[" + std::to_string(lo*Constants::RAD2DEG) + ", "
+                               + std::to_string(hi*Constants::RAD2DEG) + "]\n";
+      reply += "  pos=" + std::to_string(sc->get_position()*Constants::RAD2DEG);
+      reply += " deg  err=" + std::to_string(sc->get_position_error()*Constants::RAD2DEG) + " deg\n";
+      reply += "  max_abs_pos_error=" + std::to_string(sc->max_abs_pos_error) + " \n";
+      reply += "  max_abs_output=" + std::to_string(sc->max_abs_output) + " \n";
+      reply += "  amplitude=" + std::to_string(sc->get_motor_driver().get_amplitude()) + "\n";
+      reply += "  stall_count=" + std::to_string(sc->stall_count) + "\n";
+      reply += "  stall_pos=" + std::to_string(sc->stall_pos*Constants::RAD2DEG) + " deg\n";
+    
+      float elo, ehi;
+      sc->get_enc_to_pos_lut().get_intput_range(elo, ehi);
+      float expected = (CALIBRATION_RANGE*Constants::DEG2RAD / ENCODER_ANGLE_TO_ROTOR_ANGLE)
+                       / Constants::TWO_PI_F * float(MT6835_CPR);
+      reply += "  enc_span=" + std::to_string(ehi-elo);
+      reply += "  expected=" + std::to_string(expected);
+      reply += "  ratio=" + std::to_string((ehi-elo)/expected) + "\n";
+    }
+    reply += "servo dt: min=" + std::to_string(min_servo_dt*1e6f);
+    reply += " s  max=" + std::to_string(max_servo_dt*1e6f) + " s\n";
+    reply += "Free heap: " + std::to_string(rp2040.getFreeHeap()) + "\n";
+    reply += "ok\n";
+    return;
+  }
+
+  // reset diagnostics
+  if(cmd.get_command() == "M61") {
+    for(int i=0; i<NUM_JOINTS; i++) {
+      joints[i]->encoder->reset_diagnostics();
+      joints[i]->servo_controller->field_lut_clamp_count = 0;
+      joints[i]->servo_controller->max_abs_pos_error = 0.0f;
+      joints[i]->servo_controller->max_abs_output = 0.0f;
+      joints[i]->servo_controller->stall_count = 0.0;
+      joints[i]->servo_controller->stall_pos  = 0.0f;
+    }
+    reply = "ok\n";
+    return;
+  }
+
 }
 
 void Robot::process_motion_command(const GCodeCommand& cmd, std::string& reply) {

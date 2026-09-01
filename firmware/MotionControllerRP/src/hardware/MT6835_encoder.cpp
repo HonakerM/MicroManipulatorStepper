@@ -324,27 +324,40 @@ bool MT6835Encoder::write_register(uint16_t reg, uint8_t value) {
     transfer_24(&cmd);
     return cmd.data == MT6835_WRITE_ACK;
 }
-
 MT6835Encoder::AbsRawAngleType MT6835Encoder::update_abs_raw_angle(int32_t raw_angle) {
-    if(raw_angle >= 0) { 
+    if(raw_angle >= 0) {
       int32_t half_max = MT6835_CPR>>1;
 
       int32_t d = raw_angle - last_raw_angle;
       if (d > half_max) d -= MT6835_CPR;
       else if (d < -half_max) d += MT6835_CPR;
 
-
-      int32_t prev_val = abs_raw_angle;
-      abs_raw_angle += d;
-      if (abs_raw_angle <0 && prev_val >0){
-        LOG_INFO("Possible overflow from %ld to %ld with incr %ld", prev_val, abs_raw_angle, d);
+      // --- diagnostics (a handful of instructions, safe in the servo loop) ---
+      uint64_t now = time_us_64();
+      if(last_read_time_us != 0) {
+        uint32_t gap = (uint32_t)(now - last_read_time_us);
+        if(gap > diag.max_read_gap_us) diag.max_read_gap_us = gap;
       }
+      last_read_time_us = now;
+
+      int32_t ad = (d < 0) ? -d : d;
+      if(ad > diag.max_abs_delta) diag.max_abs_delta = ad;
+
+      if(ad > slip_threshold) {
+        if(diag.slip_count == 0) {
+          diag.first_slip_us    = now;
+          diag.first_slip_delta = d;
+        }
+        diag.slip_count++;
+      }
+      // ----------------------------------------------------------------------
+
+      abs_raw_angle += d;
       last_raw_angle = raw_angle;
     }
 
     return abs_raw_angle;
 }
-
 // Helper SPI transaction helpers for CS handling and SPI transfer
 void MT6835Encoder::spi_begin_transaction() {
     // No real beginTransaction in Pico SDK; just pull CS low if used

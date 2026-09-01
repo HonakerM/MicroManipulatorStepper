@@ -202,6 +202,19 @@ class MT6835Encoder {
       bool set_zero_from_current_position();
       bool write_eeprom();  // takes ~6s to complete after calling
 
+      struct Diagnostics {
+        uint32_t slip_count      = 0;  // implausible jumps - period probably lost
+        int32_t  max_abs_delta   = 0;  // largest |d| seen [counts]
+        uint32_t max_read_gap_us = 0;  // longest interval between two reads
+        uint64_t first_slip_us   = 0;  // timestamp of the first slip
+        int32_t  first_slip_delta= 0;  // the delta that triggered it
+      };
+
+      const Diagnostics& get_diagnostics() const { return diag; }
+      void reset_diagnostics() { diag = Diagnostics(); last_read_time_us = 0; }
+      bool has_slipped() const { return diag.slip_count > 0; }
+      
+
       bool check_crc = false;
       int32_t cs_pin;
   private:
@@ -225,4 +238,8 @@ class MT6835Encoder {
       uint8_t read_register(uint16_t reg);
       bool write_register(uint16_t reg, uint8_t value);
       uint8_t calc_crc(uint32_t angle, uint8_t status);
+
+      Diagnostics diag;
+      int32_t slip_threshold = MT6835_CPR/4;
+      uint64_t last_read_time_us = 0;
 };

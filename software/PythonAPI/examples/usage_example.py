@@ -9,6 +9,7 @@ def select_serial_device():
     """List available serial devices and prompt the user to select one."""
 
     devices = SerialInterface.list_serial_devices()
+    devices = sorted(devices, key=lambda d: d.port)  # Sort devices by port name
 
     if not devices:
         print("No serial devices found.")
@@ -213,12 +214,20 @@ def run_free_move(oms):
             x, y, z = oms.read_current_position()
             print(f"\nCurrent position -> X:{x:.4f}, Y:{y:.4f}, Z:{z:.4f}")
 
-            user_input = input("Enter target X,Y,Z (or 'q' to quit, 'i' to info): ")
+            user_input = input("Enter target X,Y,Z (or 'q' to quit, 'd' to diag, 's' to send command,'i' to info): ")
 
             if user_input.lower() == 'q':
                 break
             if user_input.lower() == 'i':
                 oms.read_device_state_info()
+                continue
+            if user_input.lower() == 'd':
+                oms.send_command("M60")
+                oms.send_command("M61")
+                continue
+            if user_input.lower() == 's':
+                command_input = input("Enter command to send: ").strip()
+                oms.send_command(command_input)
                 continue
             
             if "+" in user_input:
@@ -229,7 +238,7 @@ def run_free_move(oms):
             z_target = float(z_str.strip())
 
             print(f"Moving to X:{x_target}, Y:{y_target}, Z:{z_target}")
-            oms.set_pose(x_target, y_target, z_target)
+            oms.move_to(x_target, y_target, z_target, 5, blocking=True, timeout=5.0)
             oms.wait_for_stop()
 
         except ValueError:

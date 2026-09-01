@@ -423,16 +423,14 @@ class OpenMicroStageInterface:
             axis_list = [2, 1, 0]
 
         # Home one axis at a time
+        cmd = "G28"
         for axis_idx in axis_list:
             if (0 > axis_idx) or (axis_idx >= len(axis_chars)):
                 raise ValueError("Axis index out of range")
-            cmd = "G28 " + axis_chars[axis_idx]
-            res, msg = self.send_command(cmd + "\n", 10)
-            if res != self.serial.ReplyStatus.OK:
-                return res
-        
-        return self.serial.ReplyStatus.OK
+            cmd += " "+     axis_chars[axis_idx]
 
+        res, _ = self.send_command(cmd + "\n", 10)
+        return res
     @synchronized_action
     def calibrate_joint(self, joint_index: int, save_result: bool)->tuple[SerialInterface.ReplyStatus, list[list[float]]]:
         """

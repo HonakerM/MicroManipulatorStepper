@@ -56,8 +56,8 @@ bool measure_calibration_data(
       // TODO: read motor_pos from precise reference encoder
       
       // don't care about weak fields for now
-      //if(encoder.get_status() & MT6835_STATUS_WEAKFIELD)
-      //  weak_field_measurements++;
+      if(encoder.get_status() & MT6835_STATUS_WEAKFIELD)
+        weak_field_measurements++;
  
       if(print_measurements)
         LOG_RAW("%15.10f, %15.10f, %f, %d", motor_pos, field_angle, encoder_angle_raw, encoder.get_status() & MT6835_STATUS_WEAKFIELD);

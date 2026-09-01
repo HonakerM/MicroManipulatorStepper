@@ -71,6 +71,9 @@ void Logger::log(ELogLevel level, const char* fmt, va_list args) {
   char buf[128];  // Adjust size as needed
   vsnprintf(buf, sizeof(buf), fmt, args);
 
+  size_t len = strlen(buf);
+  if(Serial.availableForWrite() < len) return; 
+
   Serial.print(log_prefix(level));
   Serial.println(buf);
 }

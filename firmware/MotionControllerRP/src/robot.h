@@ -99,6 +99,8 @@ class Robot : public ICommandProcessor {
     static bool update_motion_controller_isr(repeating_timer_t* timer); // called from update timer
 
   private:
+    float max_servo_dt = 0.0f; float min_servo_dt = 1.0f;
+
     ERobotState state;
     uint32_t path_buffering_time_us;
     uint64_t path_buffering_start_time;

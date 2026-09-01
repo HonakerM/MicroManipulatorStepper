@@ -108,7 +108,9 @@ void main_core1() {
     // get time and detla time
     uint64_t time_us = time_us_64();
     float dt = float(time_us - last_time)*1e-6f;
+    if(dt < 20e-6f) continue;
     last_time = time_us;
+
 
     // limit time delta
     // dt = std::min(dt, 0.0001f);
