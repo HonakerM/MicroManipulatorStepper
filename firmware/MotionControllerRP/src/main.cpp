@@ -111,7 +111,7 @@ void main_core1() {
     last_time = time_us;
 
     // limit time delta
-    dt = std::min(dt, 0.0001f);
+    // dt = std::min(dt, 0.0001f);
 
     // update servo loops
     robot.update_servo_controllers(dt);
