@@ -262,8 +262,10 @@ void ServoController::set_motor_enabled(bool enable, bool synchronize_field_angl
 void ServoController::set_motor_update_enabled(bool enable) {
   pos_controller.reset();
   velocity_controller.reset();
-  velocity_lowpass.reset(0.0f);
+  motor_pos = read_position();        // fresh encoder read
   motor_pos_prev = motor_pos;
+  velocity = 0.0f;
+  velocity_lowpass.reset(0.0f);
   motor_update_enabled = enable;
 }
 

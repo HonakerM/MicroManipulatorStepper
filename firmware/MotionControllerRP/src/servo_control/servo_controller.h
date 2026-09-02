@@ -101,6 +101,7 @@ class ServoController {
     float max_abs_output = 0.0f;
     uint32_t stall_count = 0;
     float stall_pos = 0.0f;
+    bool stall_reported = false;
   private:
     ENCODER_TYPE& encoder;
     MOTOR_DRIVER_TYPE& motor_driver;

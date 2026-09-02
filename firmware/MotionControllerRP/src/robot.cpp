@@ -256,8 +256,9 @@ void Robot::update_servo_controllers(float dt) {
   spin_lock_unsafe_blocking(joints_spin_lock);
   for(int i=0; i<NUM_JOINTS; i++) {
     joints[i]->update(dt, one_over_dt);
-    if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT ) {
+    if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT && !joints[i]->servo_controller->stall_reported ) {
       LOG_INFO("Joint-%i: motor stall detected at pos=%f deg. Please rerun homing", i, joints[i]->servo_controller->stall_pos*Constants::RAD2DEG);
+      joints[i]->servo_controller->stall_reported = true;
     }
   }
   spin_unlock_unsafe(joints_spin_lock);
@@ -331,7 +332,9 @@ void Robot::set_pose(const Pose6DF& pose) {
     // Attempt to acquire spinlock non-blocking and set new target data for the servo loops
     if (spin_try_lock_unsafe(shared_data.lock)) {
       for (int i = 0; i < NUM_JOINTS; i++) {
-        LOG_DEBUG("Joint-%i: set pose -> angle from %f to %f", i, shared_data.joint_target_positions[i], joint_positions[i]);
+        if(ENABLE_MOTOR_POS_NOTIFICATION){
+          LOG_DEBUG("Joint-%i: set pose -> angle from %f to %f", i, shared_data.joint_target_positions[i], joint_positions[i]);
+        }
         shared_data.joint_target_positions[i] = joint_positions[i];
         shared_data.joint_target_velocities[i] = 0.0f;
       }
@@ -739,6 +742,7 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
       joints[i]->servo_controller->max_abs_output = 0.0f;
       joints[i]->servo_controller->stall_count = 0.0;
       joints[i]->servo_controller->stall_pos  = 0.0f;
+      joints[i]->servo_controller->stall_reported  = false;
     }
     reply = "ok\n";
     return;
