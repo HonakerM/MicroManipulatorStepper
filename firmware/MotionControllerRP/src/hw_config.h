@@ -17,7 +17,6 @@ constexpr float MOTOR3_POLE_PAIRS = 50;
 constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.80f;
 
 constexpr float MAX_MOTOR_STALL_COUNT = 500;
-constexpr bool ENABLE_MOTOR_POS_NOTIFICATION = false;
 
 //--- ENCODERS ----------------------------------------------------------------
 

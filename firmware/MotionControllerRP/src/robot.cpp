@@ -188,6 +188,16 @@ void Robot::update_path_planner() {
   }
 }
 
+void Robot::check_servo_loop() {
+  // check for stalls on core0
+  for(int i=0; i<NUM_JOINTS; i++) {
+    if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT && !joints[i]->servo_controller->stall_reported ) {
+      LOG_INFO("Joint-%i: motor stall detected at pos=%f deg. Please rerun homing", i, joints[i]->servo_controller->stall_pos*Constants::RAD2DEG);
+      joints[i]->servo_controller->stall_reported = true;
+    }
+  }
+}
+
 /**
  * Updates the motion controller with a timer interrupt in regular intervals (e.g. 2kHz).
  * The function evaluates joint space path segments and produces the current 
@@ -256,10 +266,6 @@ void Robot::update_servo_controllers(float dt) {
   spin_lock_unsafe_blocking(joints_spin_lock);
   for(int i=0; i<NUM_JOINTS; i++) {
     joints[i]->update(dt, one_over_dt);
-    if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT && !joints[i]->servo_controller->stall_reported ) {
-      LOG_INFO("Joint-%i: motor stall detected at pos=%f deg. Please rerun homing", i, joints[i]->servo_controller->stall_pos*Constants::RAD2DEG);
-      joints[i]->servo_controller->stall_reported = true;
-    }
   }
   spin_unlock_unsafe(joints_spin_lock);
 
