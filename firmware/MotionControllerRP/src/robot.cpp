@@ -74,7 +74,7 @@ Robot::~Robot() {
 }
 
 void Robot::init() {
-  MT6835Encoder::setup_spi(spi0, PIN_ENCODER_SCK, PIN_ENCODER_MOSI, PIN_ENCODER_MISO, 1000000);
+  MT6835Encoder::setup_spi(spi0, PIN_ENCODER_SCK, PIN_ENCODER_MOSI, PIN_ENCODER_MISO, ENCODER_SPI_FREQUENCY);
 
   // axis 1
   {
@@ -113,6 +113,23 @@ void Robot::init() {
   for(int i=0; i<NUM_JOINTS; i++) {
     joints[i]->init(i);
     joints[i]->load_calibration();
+  }
+
+  // Arm the encoder read validation. A corrupted spi frame otherwise feeds straight into
+  // the phase unwrapping and permanently offsets the joint position.
+  {
+    // fastest plausible step expressed in raw encoder counts per microsecond
+    const float counts_per_rotor_rad = float(MT6835_CPR) / 
+                                       (Constants::TWO_PI_F*ENCODER_ANGLE_TO_ROTOR_ANGLE);
+    const float max_counts_per_us = counts_per_rotor_rad*MAX_PLAUSIBLE_MOTOR_VELOCITY*1e-6f;
+
+    for(int i=0; i<NUM_JOINTS; i++) {
+      auto* encoder = joints[i]->encoder;
+      encoder->set_read_filter(ENCODER_READ_RETRIES, max_counts_per_us, 
+                               MAX_CONSECUTIVE_ENCODER_REJECTS);
+      if(ENCODER_CRC_AUTODETECT && encoder->is_initialized())
+        encoder->autodetect_crc();
+    }
   }
 
   // add tools
@@ -194,6 +211,12 @@ void Robot::check_servo_loop() {
     if (joints[i]->servo_controller->stall_count > MAX_MOTOR_STALL_COUNT && !joints[i]->servo_controller->stall_reported ) {
       LOG_INFO("Joint-%i: motor stall detected at pos=%f deg. Please rerun homing", i, joints[i]->servo_controller->stall_pos*Constants::RAD2DEG);
       joints[i]->servo_controller->stall_reported = true;
+    }
+
+    // encoder gave up on rejecting corrupted samples and had to resync
+    if (joints[i]->encoder->has_read_fault() && !joints[i]->servo_controller->encoder_fault_reported) {
+      LOG_INFO("Joint-%i: encoder read fault, position may have jumped. Please rerun homing", i);
+      joints[i]->servo_controller->encoder_fault_reported = true;
     }
   }
 }
@@ -338,9 +361,6 @@ void Robot::set_pose(const Pose6DF& pose) {
     // Attempt to acquire spinlock non-blocking and set new target data for the servo loops
     if (spin_try_lock_unsafe(shared_data.lock)) {
       for (int i = 0; i < NUM_JOINTS; i++) {
-        if(ENABLE_MOTOR_POS_NOTIFICATION){
-          LOG_DEBUG("Joint-%i: set pose -> angle from %f to %f", i, shared_data.joint_target_positions[i], joint_positions[i]);
-        }
         shared_data.joint_target_positions[i] = joint_positions[i];
         shared_data.joint_target_velocities[i] = 0.0f;
       }
@@ -712,6 +732,17 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
       reply += "  max_delta=" + std::to_string(d.max_abs_delta);
       reply += " of half_window=" + std::to_string(MT6835_CPR>>1) + "\n";
       reply += "  max_read_gap=" + std::to_string(d.max_read_gap_us) + " us\n";
+      reply += "  crc=" + std::string(joints[i]->encoder->is_crc_enabled() ? "on" : "off");
+      reply += "  crc_rejects=" + std::to_string(d.crc_rejects);
+      reply += "  range_rejects=" + std::to_string(d.range_rejects);
+      reply += "  last_reject_delta=" + std::to_string(d.last_reject_delta) + "\n";
+      reply += "  retries=" + std::to_string(d.retries);
+      reply += "  recovered=" + std::to_string(d.recovered_reads);
+      reply += "  skipped=" + std::to_string(d.skipped_reads);
+      reply += "  max_consecutive_bad=" + std::to_string(d.max_consecutive_bad);
+      reply += "  resyncs=" + std::to_string(d.resyncs);
+      reply += "  read_fault=" + std::to_string(joints[i]->encoder->has_read_fault() ? 1 : 0) + "\n";
+      reply += "  skipped_servo_updates=" + std::to_string(sc->skipped_update_count) + "\n";
       reply += "  lut_clamps=" + std::to_string(sc->field_lut_clamp_count);
       reply += "  last_oor_pos=" + std::to_string(sc->last_out_of_range_pos*Constants::RAD2DEG);
       reply += " deg  range=[" + std::to_string(lo*Constants::RAD2DEG) + ", "
@@ -749,6 +780,9 @@ void Robot::process_machine_command(const GCodeCommand& cmd, std::string& reply)
       joints[i]->servo_controller->stall_count = 0.0;
       joints[i]->servo_controller->stall_pos  = 0.0f;
       joints[i]->servo_controller->stall_reported  = false;
+      joints[i]->servo_controller->skipped_update_count = 0;
+      joints[i]->servo_controller->encoder_fault_reported = false;
+      joints[i]->encoder->clear_read_fault();
     }
     reply = "ok\n";
     return;
@@ -915,10 +949,27 @@ void Robot::process_set_servo_parameter_command(const GCodeCommand& cmd, std::st
   bool has_all = cmd.has_word('A') && cmd.has_word('B') && cmd.has_word('C') && 
                  cmd.has_word('D') && cmd.has_word('F');
 
-  if(has_all == false)
+  if(has_all == false) {
     reply = "error: not all parameters given (A,B,C,D,F expected)\n";
+    return;
+  }
 
-  for(int i=0; i<NUM_JOINTS; i++) {
+  // optional joint selection
+  int joint_start = 0;
+  int joint_end = NUM_JOINTS;
+  if (cmd.has_word('J')) {
+    int joint = static_cast<int>(cmd.get_value('J'));
+
+    if (joint < 0 || joint >= NUM_JOINTS) {
+      reply = "error: invalid joint index\n";
+      return;
+    }
+
+    joint_start = joint;
+    joint_end = joint + 1;
+  }
+
+  for(int i=joint_start; i<joint_end; i++) {
 
     joints[i]->servo_controller->velocity_lowpass.set_time_constant(cmd.get_value('F'));
     joints[i]->servo_controller->pos_controller.set_parameter(cmd.get_value('A'), cmd.get_value('B'), 0.0f, Constants::PI_F*2.0F, Constants::PI_F*0.5F);

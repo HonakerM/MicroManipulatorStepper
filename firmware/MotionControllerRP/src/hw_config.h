@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include "utilities/math_constants.h"
 
 // #define DEMO_MODE
@@ -14,7 +15,7 @@ constexpr float MOTOR3_POLE_PAIRS = 50;
 
 // max current factor in range [0..1]. Lower values reduce pwm resolution so a
 // value above 0.4 is recommended.
-constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.80f;
+constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.60f;
 
 constexpr float MAX_MOTOR_STALL_COUNT = 500;
 
@@ -26,10 +27,36 @@ constexpr float ENCODER_MAGNET_PITCH = 3.0f;    // [mm]
 constexpr float ENCODER_MAGNET_RADIUS = 30.0f;  // [mm]
 constexpr float ENCODER_ANGLE_TO_ROTOR_ANGLE = (ENCODER_MAGNET_PITCH*2.0f) / 
                                                (ENCODER_MAGNET_RADIUS * Constants::TWO_PI_F);
-											   
+#define ENCODER_SPI_FREQUENCY 1000000 // [Hz] - max 1MHz for MT6835 encoder
+
+                                               
 // enables error checking for encoders (slow) - useful for debugging
 // Note: some chips seem to return always a crc of 0 producing massiv false errors       
 constexpr bool ENABLE_ENCODER_CRC = false;
+
+// Probes the chip crc at startup and enables crc checking only if the chip actually
+// produces a valid crc. This makes ENABLE_ENCODER_CRC safe to leave off: chips with a
+// working crc get the extra protection, broken ones simply keep it disabled.
+constexpr bool ENCODER_CRC_AUTODETECT = true;
+
+// --- encoder read validation -------------------------------------------------
+// A corrupted spi frame is indistinguishable from real motion for the phase unwrapping
+// in MT6835Encoder, and a single bad frame permanently offsets the absolute position.
+// Suspicious samples are therefore re-read and, if still bad, skipped.
+
+// number of extra spi reads attempted when a sample fails validation
+constexpr int ENCODER_READ_RETRIES = 2;
+
+// Fastest rotor motion considered physically possible [rad/s]. A sample implying a step
+// faster than this is treated as corrupted data, not motion. Keep this well above any
+// velocity the machine can reach (including being pushed by hand) - the whole calibrated
+// range is only about 1.3 rad, so 50 rad/s traverses it in ~26 ms.
+constexpr float MAX_PLAUSIBLE_MOTOR_VELOCITY = 50.0f;
+
+// After this many rejected reads in a row the sample is accepted anyway to keep the servo
+// loop from going blind, and an encoder fault is reported (position may have jumped).
+// At 6 kHz this is about 10 ms of consecutive bad data.
+constexpr uint32_t MAX_CONSECUTIVE_ENCODER_REJECTS = 64;
 
 //--- HOMING ------------------------------------------------------------------
 

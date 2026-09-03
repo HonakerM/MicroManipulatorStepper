@@ -202,16 +202,47 @@ class MT6835Encoder {
       bool set_zero_from_current_position();
       bool write_eeprom();  // takes ~6s to complete after calling
 
+      // Measures how often the chip crc actually validates and enables crc checking only
+      // if it does. Some chips always return a crc of 0 which would reject every read.
+      bool autodetect_crc(int sample_count=64, float max_error_rate=0.02f);
+
+      // Configures the read rejection filter.
+      //  retries                 : extra spi reads attempted when a sample is rejected
+      //  max_counts_per_us       : fastest plausible motion [raw counts per us], 0 disables the gate
+      //  max_consecutive_rejects : after this many rejects in a row the next sample is force
+      //                            accepted (resync) and the read fault flag is raised
+      void set_read_filter(int retries, float max_counts_per_us, uint32_t max_consecutive_rejects);
+
+      // True if the most recent read_abs_angle_raw() produced a trusted sample. If false the
+      // returned position is the last good one and the caller should skip this cycle.
+      bool last_read_valid() const { return last_read_ok; }
+
+      // Sticky flag: a resync happened, so the absolute position may have jumped.
+      bool has_read_fault() const { return read_fault; }
+      void clear_read_fault() { read_fault = false; consecutive_bad_reads = 0; }
+
       struct Diagnostics {
         uint32_t slip_count      = 0;  // implausible jumps - period probably lost
         int32_t  max_abs_delta   = 0;  // largest |d| seen [counts]
         uint32_t max_read_gap_us = 0;  // longest interval between two reads
         uint64_t first_slip_us   = 0;  // timestamp of the first slip
         int32_t  first_slip_delta= 0;  // the delta that triggered it
+        uint32_t crc_rejects     = 0;  // samples dropped because the crc did not match
+        uint32_t range_rejects   = 0;  // samples dropped because the delta was not plausible
+        uint32_t retries         = 0;  // extra spi reads caused by rejected samples
+        uint32_t recovered_reads = 0;  // reads that a retry managed to rescue
+        uint32_t skipped_reads   = 0;  // reads given up on - position was held
+        uint32_t resyncs         = 0;  // force accepted samples after repeated rejects
+        uint32_t max_consecutive_bad = 0; // longest run of rejected reads
+        int32_t  last_reject_delta = 0;   // delta of the most recent rejected sample
       };
 
       const Diagnostics& get_diagnostics() const { return diag; }
-      void reset_diagnostics() { diag = Diagnostics(); last_read_time_us = 0; }
+      void reset_diagnostics() { 
+        diag = Diagnostics(); 
+        last_read_time_us = 0; 
+        consecutive_bad_reads = 0;
+      }
       bool has_slipped() const { return diag.slip_count > 0; }
       
 
@@ -230,6 +261,13 @@ class MT6835Encoder {
 
       AbsRawAngleType update_abs_raw_angle(AbsRawAngleType raw_angle);
 
+      // reads one angle frame from the chip, returns false on a crc mismatch
+      bool read_raw_frame(int32_t& raw_angle);
+
+      // checks if the step from 'last_raw_angle' to 'raw_angle' could physically happen
+      // within 'gap_us'. Always rejects steps beyond half a period, those are ambiguous.
+      bool is_delta_plausible(int32_t raw_angle, uint32_t gap_us) const;
+
       void spi_begin_transaction();
       void spi_transfer(uint8_t* data, size_t length);
       void spi_end_transaction();
@@ -242,4 +280,13 @@ class MT6835Encoder {
       Diagnostics diag;
       int32_t slip_threshold = MT6835_CPR/4;
       uint64_t last_read_time_us = 0;
+
+      // read rejection filter
+      int      read_retries = 0;              // 0 = no retry, sample is skipped right away
+      float    max_counts_per_us = 0.0f;      // 0 = plausibility gate disabled
+      uint32_t max_consecutive_rejects = 0;   // 0 = never force a resync
+      uint32_t consecutive_bad_reads = 0;
+      uint64_t last_good_read_time_us = 0;    // timestamp of the last accepted sample
+      bool     last_read_ok = true;
+      bool     read_fault = false;
 };

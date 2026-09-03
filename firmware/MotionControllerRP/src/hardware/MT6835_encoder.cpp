@@ -48,6 +48,10 @@ bool MT6835Encoder::init(uint8_t bandwidth, uint8_t hysteresis) {
   last_raw_angle = 0;
   abs_raw_angle = 0;
   crc_error_count = 0;
+  last_good_read_time_us = 0;
+  consecutive_bad_reads = 0;
+  last_read_ok = true;
+  read_fault = false;
   initialized = true;
 
   return true;
@@ -84,7 +88,9 @@ float MT6835Encoder::read_abs_angle() {
   return raw_angle * RAW_TO_ANGLE;
 }
 
-MT6835Encoder::AbsRawAngleType MT6835Encoder::read_abs_angle_raw() {
+// Reads a single angle frame. Returns false if crc checking is armed and the frame
+// failed it, in which case 'raw_angle' still holds the (untrusted) value.
+bool MT6835Encoder::read_raw_frame(int32_t& raw_angle) {
   uint8_t data[6] = {0};
   data[0] = MT6835_OP_ANGLE << 4;
   data[1] = MT6835_REG_ANGLE1;
@@ -96,21 +102,96 @@ MT6835Encoder::AbsRawAngleType MT6835Encoder::read_abs_angle_raw() {
 
   last_status = data[4] & 0x07;
   last_crc = data[5];
-  int32_t raw_angle = ((int32_t)data[2] << 13) | ((int32_t)data[3] << 5) | (data[4] >> 3);
+  raw_angle = ((int32_t)data[2] << 13) | ((int32_t)data[3] << 5) | (data[4] >> 3);
 
+  if (check_crc && last_crc != calc_crc(raw_angle, last_status)) {
+    last_status |= MT6835_CRC_ERROR;
+    crc_error_count++;
+    return false;
+  }
 
-  if(cs_pin == PIN_ENCODER1_CS){
-    //LOG_INFO("Raw angle from encoder_1: %ld", raw_angle);
+  return true;
+}
+
+// The unwrapping in update_abs_raw_angle() can only resolve steps below half a period,
+// and a real joint is far slower than that. Anything faster than the motor can physically
+// move in the elapsed time is a corrupted sample, not motion.
+bool MT6835Encoder::is_delta_plausible(int32_t raw_angle, uint32_t gap_us) const {
+  const int32_t half_max = MT6835_CPR>>1;
+
+  int32_t d = raw_angle - last_raw_angle;
+  if (d > half_max) d -= MT6835_CPR;
+  else if (d < -half_max) d += MT6835_CPR;
+  int32_t ad = (d < 0) ? -d : d;
+
+  // no trusted reference sample yet (first read after init/reset) -> nothing to compare to
+  if(last_good_read_time_us == 0)
+    return true;
+
+  // no gate configured -> only the hard half period limit applies
+  if(max_counts_per_us <= 0.0f)
+    return ad < half_max;
+
+  // allow a small fixed budget on top so encoder hysteresis and jitter never trip the gate
+  float budget = max_counts_per_us*float(gap_us) + 64.0f;
+  if(budget > float(half_max)) budget = float(half_max);
+
+  return float(ad) <= budget;
+}
+
+MT6835Encoder::AbsRawAngleType MT6835Encoder::read_abs_angle_raw() {
+  const uint64_t now = time_us_64();
+  const uint32_t good_gap_us = (last_good_read_time_us != 0) ? 
+                               (uint32_t)(now - last_good_read_time_us) : 0;
+
+  // read, and re-read a few times if the sample looks corrupted
+  int32_t raw_angle = 0;
+  bool sample_ok = false;
+  for(int attempt = 0; attempt <= read_retries; attempt++) {
+    if(attempt > 0) diag.retries++;
+
+    if(read_raw_frame(raw_angle) == false) {
+      diag.crc_rejects++;
+      continue;
+    }
+    if(is_delta_plausible(raw_angle, good_gap_us) == false) {
+      diag.range_rejects++;
+      diag.last_reject_delta = raw_angle - last_raw_angle;
+      continue;
+    }
+
+    sample_ok = true;
+    if(attempt > 0) diag.recovered_reads++;
+    break;
   }
-  
-  if (check_crc) {
-      if (last_crc != calc_crc(raw_angle, last_status)) {
-          last_status |= MT6835_CRC_ERROR;
-          crc_error_count++;
-          // LOG_ERROR("chip_crc: %i - calc_crc: %i", last_crc, calc_crc(raw_angle, last_status));
-     //     return -1.0f; // CRC error indicator
-      }
+
+  if(sample_ok == false) {
+    consecutive_bad_reads++;
+    if(consecutive_bad_reads > diag.max_consecutive_bad)
+      diag.max_consecutive_bad = consecutive_bad_reads;
+
+    // The rejects are not going away, so this is not a glitch anymore. Holding the position
+    // forever would leave the servo loop blind, so accept the sample to stay roughly in sync
+    // and raise the fault flag - the absolute position can no longer be trusted.
+    if(max_consecutive_rejects > 0 && consecutive_bad_reads >= max_consecutive_rejects) {
+      diag.resyncs++;
+      read_fault = true;
+      consecutive_bad_reads = 0;
+      last_read_ok = true;
+      last_good_read_time_us = now;
+      return update_abs_raw_angle(raw_angle);
+    }
+
+    // Skip: hold the last good position and, importantly, leave 'last_raw_angle' untouched
+    // so the next accepted sample is unwrapped against the last trusted anchor.
+    diag.skipped_reads++;
+    last_read_ok = false;
+    return abs_raw_angle;
   }
+
+  consecutive_bad_reads = 0;
+  last_read_ok = true;
+  last_good_read_time_us = now;
 
   return update_abs_raw_angle(raw_angle);
 }
@@ -137,6 +218,53 @@ void MT6835Encoder::set_crc_enabled(bool enable) {
 
 bool MT6835Encoder::is_crc_enabled() {
   return check_crc;
+}
+
+void MT6835Encoder::set_read_filter(int retries, float max_counts_per_us, 
+                                    uint32_t max_consecutive_rejects) {
+  MT6835Encoder::read_retries = retries < 0 ? 0 : retries;
+  MT6835Encoder::max_counts_per_us = max_counts_per_us;
+  MT6835Encoder::max_consecutive_rejects = max_consecutive_rejects;
+  MT6835Encoder::consecutive_bad_reads = 0;
+}
+
+bool MT6835Encoder::autodetect_crc(int sample_count, float max_error_rate) {
+  bool was_enabled = check_crc;
+  check_crc = true;
+
+  // sample the chip while it is standing still - only the crc result matters here
+  uint32_t errors = 0;
+  int32_t raw_angle = 0;
+  for(int i=0; i<sample_count; i++) {
+    if(read_raw_frame(raw_angle) == false)
+      errors++;
+  }
+  crc_error_count = 0;
+
+  float error_rate = float(errors)/float(sample_count > 0 ? sample_count : 1);
+  bool crc_works = error_rate <= max_error_rate;
+
+  if(crc_works) {
+    check_crc = true;
+    LOG_INFO("Encoder (cs=%i): crc validated (%i/%i frames failed), crc checking enabled", 
+             (int)cs_pin, (int)errors, sample_count);
+  } else {
+    // Some chips always return a crc of 0. Rejecting every frame would be far worse than
+    // not checking at all, so fall back to the plausibility gate only.
+    check_crc = false;
+    LOG_WARNING("Encoder (cs=%i): crc unusable (%i/%i frames failed), crc checking disabled",
+                (int)cs_pin, (int)errors, sample_count);
+  }
+
+  if(crc_works == false && was_enabled)
+    LOG_WARNING("Encoder (cs=%i): ENABLE_ENCODER_CRC was requested but the chip crc does not work",
+                (int)cs_pin);
+
+  // the probe reads left a stale anchor behind, drop it so the gate is not tripped
+  last_good_read_time_us = 0;
+  consecutive_bad_reads = 0;
+
+  return crc_works;
 }
 
 uint32_t MT6835Encoder::get_crc_error_count(bool reset) {

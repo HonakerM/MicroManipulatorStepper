@@ -227,6 +227,8 @@ def run_free_move(oms):
                 continue
             if user_input.lower() == 's':
                 command_input = input("Enter command to send: ").strip()
+                if not command_input:
+                    continue
                 oms.send_command(command_input)
                 continue
             

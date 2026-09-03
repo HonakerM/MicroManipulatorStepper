@@ -102,6 +102,8 @@ class ServoController {
     uint32_t stall_count = 0;
     float stall_pos = 0.0f;
     bool stall_reported = false;
+    uint32_t skipped_update_count = 0;   // servo cycles skipped due to rejected encoder reads
+    bool encoder_fault_reported = false;
   private:
     ENCODER_TYPE& encoder;
     MOTOR_DRIVER_TYPE& motor_driver;
@@ -115,6 +117,7 @@ class ServoController {
     float pos_error = 0;                  // current position error as computed by upate()
     float velocity = 0;                   // current velocity estimate
     float output = 0.0f;                  // servo loop output (field angle offset)
+    float pending_dt = 0.0f;              // time of skipped cycles, added to the next update
     bool motor_update_enabled = false;    // enables mootor field updates
     bool encoder_update_enabled = true;   // enables encoder reads
 };

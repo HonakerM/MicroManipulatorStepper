@@ -88,6 +88,21 @@ void ServoController::update(float target_motor_pos, float dt, float one_over_dt
   // read encoder
   int32_t encoder_angle_raw = encoder.read_abs_angle_raw();
 
+  // The sample was rejected as corrupted. Hold the current state (including the field
+  // angle, so the motor keeps its torque) and retry on the next cycle. The time of the
+  // skipped cycles is carried over so velocity and integrators stay correct.
+  if(encoder.last_read_valid() == false) {
+    skipped_update_count++;
+    pending_dt += dt;
+    return;
+  }
+
+  if(pending_dt > 0.0f) {
+    dt += pending_dt;
+    one_over_dt = 1.0f/dt;
+    pending_dt = 0.0f;
+  }
+
   // convert encoder angle to motor pos using LUT and compute field angle
   motor_pos = encoder_angle_to_motor_pos(encoder_angle_raw);
 
@@ -262,6 +277,7 @@ void ServoController::set_motor_enabled(bool enable, bool synchronize_field_angl
 void ServoController::set_motor_update_enabled(bool enable) {
   pos_controller.reset();
   velocity_controller.reset();
+  pending_dt = 0.0f;
   motor_pos = read_position();        // fresh encoder read
   motor_pos_prev = motor_pos;
   velocity = 0.0f;
@@ -272,6 +288,7 @@ void ServoController::set_motor_update_enabled(bool enable) {
 void ServoController::set_encoder_update_enabled(bool enable) {
   pos_controller.reset();
   velocity_controller.reset();
+  pending_dt = 0.0f;
   motor_pos_prev = motor_pos;
   encoder_update_enabled = enable;
 }

@@ -67,6 +67,7 @@ Rank   Frequency (Hz)       Magnitude (normalized)    Period (ms)
   Difference:    +1.4 ±    0.0 µm
 
      1 µm moves at feed     0.1 (n=54):
+     
   Actual:         2.3 ±    0.6 µm
   Difference:    +1.4 ±    0.6 µm
 
@@ -289,3 +290,9 @@ Rank   Frequency (Hz)       Magnitude (normalized)    Period (ms)
   1273 µm moves at feed    10.0 (n=1):
   Actual:       764.4 ±    0.0 µm
   Difference:  -508.4 ±    0.0 µm
+
+
+----
+M55 A60.0 B0.0 C0.2 D90.0 F0.004
+
+M55 A60.0 B0.0 C0.2 D45.0 F0.004
