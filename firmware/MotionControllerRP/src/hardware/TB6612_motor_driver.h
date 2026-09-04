@@ -28,7 +28,9 @@ class TB6612MotorDriver {
     void  set_field_angle(float angle_rad);
     float get_field_angle();
     void  set_amplitude(float amplitude, bool immediate_update);  // Input in range 0.0–1.0
-    void  set_amplitude_smooth(float amplitude, int ramp_time_ms);
+    // on_step is called on every ramp step, use it to keep encoders being read.
+    void  set_amplitude_smooth(float amplitude, int ramp_time_ms,
+                               const std::function<void()>& on_step = {});
     float get_amplitude() const;
 
     // Rotate the magnetic field by the given angle delta.

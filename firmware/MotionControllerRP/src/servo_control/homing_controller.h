@@ -49,15 +49,29 @@ class HomingController {
                float encoder_angle_to_motor_angle,
                float retract_angle_rad=-1.0f);
 
+    // Advances the state machine. Must keep being called for every joint taking part in
+    // the homing cycle - also after that joint found its endstop - because it is the only
+    // thing reading the encoder while the servo loop is suspended. A joint whose encoder
+    // is not read while it moves loses its absolute position (see update_abs_raw_angle()).
     void update();
+
+    // Starts the (non blocking) retraction from the endstop. Drive it with update() until
+    // is_retract_finished() returns true, so all joints can back off simultaneously.
+    void start_retract();
+    bool is_retract_finished() const;
+
+    // Restores the motor current. Runs any pending retraction to completion first, which
+    // is what run_blocking() relies on.
     void finalize();
 
+    // True once the endstop search ended (successfully or not).
     bool is_finished() const;
     bool is_successful() const;
     float get_home_encoder_angle() const;
 
   private:
     void on_endstop_detected();
+    void update_retract();
     float compute_eval_pos_delta(float pos, float field_angle_delta);
 
   private:
@@ -65,6 +79,8 @@ class HomingController {
       Idle,
       Initializing,
       Homing,
+      EndstopFound,
+      Retracting,
       Done
     };
 
@@ -84,6 +100,12 @@ class HomingController {
 
     // Timing
     uint64_t last_time = 0;
+
+    // Retraction
+    uint64_t retract_start_time = 0;
+    uint64_t retract_duration_us = 0;
+    float retract_start_field_angle = 0.0f;
+    float retract_total_field_angle = 0.0f;
 
     // Offsets and tracking
     float start_field_angle = 0.0f;

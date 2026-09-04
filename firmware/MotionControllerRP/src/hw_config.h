@@ -19,6 +19,8 @@ constexpr float MOTOR_MAX_CURRENT_FACTOR = 0.60f;
 
 constexpr float MAX_MOTOR_STALL_COUNT = 500;
 
+constexpr float MAX_MOTOR_DT_TIME = 0.001f;
+
 //--- ENCODERS ----------------------------------------------------------------
 
 // Conversion factor from encoder angle (one 2pi period every two magnets) to rotor angle.

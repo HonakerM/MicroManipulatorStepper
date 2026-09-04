@@ -96,7 +96,8 @@ void TB6612MotorDriver::set_amplitude(float amplitude, bool immediate_update) {
 }
 
 
-void TB6612MotorDriver::set_amplitude_smooth(float amplitude, int ramp_time_ms) {
+void TB6612MotorDriver::set_amplitude_smooth(float amplitude, int ramp_time_ms,
+                                             const std::function<void()>& on_step) {
   amplitude = std::clamp(amplitude, 0.0f, 1.0f);
   float start = TB6612MotorDriver::amplitude;
   int step_time = 10;
@@ -105,6 +106,8 @@ void TB6612MotorDriver::set_amplitude_smooth(float amplitude, int ramp_time_ms) 
   for (int i = 1; i <= steps; ++i) {
     float t = float(i) / steps;
     set_amplitude(start + t * (amplitude - start), true);
+    if(on_step)
+      on_step();
     sleep_ms(step_time);
   }
 }

@@ -276,6 +276,7 @@ void Robot::update_servo_controllers(float dt) {
   if(dt >= max_servo_dt) max_servo_dt = dt;
   if(dt <= min_servo_dt) min_servo_dt = dt;
 
+  if(dt > MAX_MOTOR_DT_TIME) dt = MAX_MOTOR_DT_TIME;
 
   // update axis target position and velocity from shared data
   spin_lock_unsafe_blocking(shared_data.lock);
@@ -422,7 +423,10 @@ bool Robot::home(uint8_t joint_mask, float retract_angles[NUM_JOINTS]) {
                                ENCODER_ANGLE_TO_ROTOR_ANGLE, retract_angles[i]);
   }
 
-  // run homing controllers
+  // Search for the endstops. Note that update() has to be called for every joint until the
+  // whole cycle is over, also for joints that already found their endstop: the servo loop
+  // is suspended here, so this loop is the only thing reading the encoders and a joint that
+  // is not read while it moves loses its encoder period (see MT6835Encoder).
   bool all_finished = false;
   while(all_finished == false) {
     all_finished = true;
@@ -433,6 +437,24 @@ bool Robot::home(uint8_t joint_mask, float retract_angles[NUM_JOINTS]) {
       // uddate
       homing_controller[i].update();
       all_finished &= homing_controller[i].is_finished();  
+    }
+  }
+
+  // Back off from the endstops. The joints are mechanically coupled, so retracting them one
+  // after the other would move the joints that are not being updated - and therefore not
+  // being read - at that moment. Retract them all at the same time instead.
+  for(int i=0; i<NUM_JOINTS; i++) {
+    if(((joint_mask>>i)&1) == 0) continue;
+    homing_controller[i].start_retract();
+  }
+
+  bool all_retracted = false;
+  while(all_retracted == false) {
+    all_retracted = true;
+    for(int i=0; i<NUM_JOINTS; i++) {
+      if(((joint_mask>>i)&1) == 0) continue;
+      homing_controller[i].update();
+      all_retracted &= homing_controller[i].is_retract_finished();
     }
   }
 
@@ -452,8 +474,24 @@ bool Robot::home(uint8_t joint_mask, float retract_angles[NUM_JOINTS]) {
     }
 
     // set joint angles
+    float joint_pos = joints[i]->servo_controller->read_position();
+
+    // A lost encoder period puts the joint far away from where it physically is. Enabling
+    // the servo loop on such a reading makes it run into the mechanical limit, so refuse
+    // to arm the joint instead.
+    float lo, hi;
+    const LookupTable& lut = joints[i]->servo_controller->get_pos_to_field_lut();
+    lut.get_intput_range(lo, hi);
+    if(lut.size() >= 2 && (joint_pos < lo || joint_pos > hi)) {
+      LOG_ERROR("Joint-%i: position after homing (%f deg) is outside the calibrated range "
+                "[%f, %f] deg. Encoder period probably lost, please rerun homing.",
+                i, joint_pos*Constants::RAD2DEG, lo*Constants::RAD2DEG, hi*Constants::RAD2DEG);
+      joints[i]->is_homed = false;
+      homing_successful = false;
+    }
+
     spin_lock_unsafe_blocking(shared_data.lock);
-    shared_data.joint_target_positions[i] = joints[i]->servo_controller->read_position();
+    shared_data.joint_target_positions[i] = joint_pos;
     spin_unlock_unsafe(shared_data.lock);
   }
 
@@ -980,7 +1018,11 @@ void Robot::process_set_servo_parameter_command(const GCodeCommand& cmd, std::st
 }
 
 void Robot::process_home_command(const GCodeCommand& cmd, std::string& reply) {
-  float retract_angles[NUM_JOINTS] = {-1.0f};
+  // negative means 'use the default retract angle' - has to be set for every joint,
+  // an initialiser list would leave the remaining elements at 0
+  float retract_angles[NUM_JOINTS];
+  for(int i=0; i<NUM_JOINTS; i++)
+    retract_angles[i] = -1.0f;
 
   // TODO: check parameter and build joint mask
   uint8_t joint_mask = 0;

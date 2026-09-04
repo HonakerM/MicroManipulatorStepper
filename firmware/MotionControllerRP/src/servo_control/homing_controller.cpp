@@ -76,11 +76,26 @@ void HomingController::start(ServoController* servo_controller,
 }
 
 void HomingController::update() {
-  if (state != State::Homing)
+  if (state == State::Idle || state == State::Initializing)
     return;
 
   auto& motor_driver = servo_ctrl->get_motor_driver();
   auto& encoder = servo_ctrl->get_encoder();
+
+  // The servo loop is suspended for the whole homing cycle, so this is the only place
+  // reading the encoder. A joint that stops being read while it still moves (the joints
+  // are mechanically coupled, so retracting one moves the others) loses track of its
+  // encoder period and comes out of homing with a permanently wrong absolute position.
+  // Keep polling it in every state.
+  if (state == State::EndstopFound || state == State::Done) {
+    encoder.read_abs_angle();
+    return;
+  }
+
+  if (state == State::Retracting) {
+    update_retract();
+    return;
+  }
 
   uint64_t time_us = time_us_64();
   if(last_time == 0) last_time = time_us;
@@ -120,7 +135,7 @@ void HomingController::update() {
 }
 
 void HomingController::on_endstop_detected() {
-  state = State::Done;
+  state = State::EndstopFound;
   auto& motor_driver = servo_ctrl->get_motor_driver();
   auto& encoder = servo_ctrl->get_encoder();
 
@@ -140,27 +155,73 @@ void HomingController::on_endstop_detected() {
     LOG_WARNING("encoder angle for %d at home position close to wrap around point !", encoder.cs_pin);
 }
 
-void HomingController::finalize() {
-   auto& motor_driver = servo_ctrl->get_motor_driver();
-   float pole_pair_count = servo_ctrl->get_pole_pair_count();
- 
-  // back off from home position
-  motor_driver.rotate_field(retract_field_angle * (field_velocity>0.0f ? -1.0f : 1.0f), 
-                            retract_field_velocity, [this](){
-                              // update encoder so it doesnt miss a period
-                              servo_ctrl->get_encoder().read_abs_angle();
-                            });
+void HomingController::start_retract() {
+  if (state != State::EndstopFound)
+    return;
 
-  // restore previous motor current
-  motor_driver.set_amplitude_smooth(initial_current, 100);
+  if (search_failed) {
+    state = State::Done;
+    return;
+  }
+
+  auto& motor_driver = servo_ctrl->get_motor_driver();
+
+  retract_total_field_angle = retract_field_angle * (field_velocity>0.0f ? -1.0f : 1.0f);
+  retract_start_field_angle = motor_driver.get_field_angle();
+  retract_duration_us = (uint64_t)(fabsf(retract_total_field_angle/retract_field_velocity)*1e6f);
+  retract_start_time = time_us_64();
+
+  state = State::Retracting;
 }
 
-bool HomingController::is_finished() const {
+// Time based version of TB6612MotorDriver::rotate_field() so all joints can back off from
+// their endstop at the same time instead of one after the other.
+void HomingController::update_retract() {
+  auto& motor_driver = servo_ctrl->get_motor_driver();
+  auto& encoder = servo_ctrl->get_encoder();
+
+  uint64_t elapsed_us = time_us_64() - retract_start_time;
+
+  if (elapsed_us >= retract_duration_us) {
+    motor_driver.set_field_angle(retract_start_field_angle + retract_total_field_angle);
+    encoder.read_abs_angle();
+    state = State::Done;
+    return;
+  }
+
+  float t = retract_duration_us > 0 ? float(elapsed_us)/float(retract_duration_us) : 1.0f;
+  motor_driver.set_field_angle(retract_start_field_angle + retract_total_field_angle*t);
+
+  // update encoder so it doesnt miss a period
+  encoder.read_abs_angle();
+}
+
+bool HomingController::is_retract_finished() const {
   return state == State::Done;
 }
 
+void HomingController::finalize() {
+  auto& motor_driver = servo_ctrl->get_motor_driver();
+
+  // back off from home position - already done when the caller drove the retraction of all
+  // joints in parallel, otherwise run it here (blocking, used by run_blocking())
+  if (state == State::EndstopFound)
+    start_retract();
+  while (state == State::Retracting)
+    update();
+
+  // restore previous motor current, keep the encoder alive during the ramp
+  motor_driver.set_amplitude_smooth(initial_current, 100, [this](){
+    servo_ctrl->get_encoder().read_abs_angle();
+  });
+}
+
+bool HomingController::is_finished() const {
+  return state == State::EndstopFound || state == State::Retracting || state == State::Done;
+}
+
 bool HomingController::is_successful() const {
-  return state == State::Done && !search_failed;
+  return is_finished() && !search_failed;
 }
 
 float HomingController::get_home_encoder_angle() const {
